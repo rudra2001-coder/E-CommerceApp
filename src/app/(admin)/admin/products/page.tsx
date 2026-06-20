@@ -48,11 +48,23 @@ export default function AdminProducts() {
     setLoading(true)
     try {
       const [productsRes, catsRes] = await Promise.all([
-        adminApi.select('products', [], { select: '*, category:categories(*)', order: { column: 'created_at', ascending: false } }),
+        adminApi.select('products', [], { select: '*', order: { column: 'created_at', ascending: false } }),
         adminApi.select('categories', [], { order: { column: 'name', ascending: true } }),
       ])
-      setProducts((productsRes || []) as Product[])
-      setCategories((catsRes || []) as Category[])
+      const prods = (productsRes || []) as Product[]
+      const cats = (catsRes || []) as Category[]
+      const withImages = await Promise.all(
+        prods.map(async (p) => {
+          try {
+            const imgs = await adminApi.select('product_images', [{ method: 'eq', column: 'product_id', value: p.id }], { order: { column: 'sort_order', ascending: true } })
+            return { ...p, images: imgs || [], category: cats.find(c => c.id === p.category_id) }
+          } catch {
+            return { ...p, images: [], category: cats.find(c => c.id === p.category_id) }
+          }
+        })
+      )
+      setProducts(withImages)
+      setCategories(cats)
     } catch (err) {
       console.error(err)
     } finally {

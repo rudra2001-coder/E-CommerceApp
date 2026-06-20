@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -40,7 +40,7 @@ const fadeUp = {
 
 const sortLabel = (value: string) => SORT_OPTIONS.find(o => o.value === value)?.label || value
 
-export default function ProductsPage() {
+function ProductsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { addItem } = useCart()
@@ -83,14 +83,15 @@ export default function ProductsPage() {
     try {
       let query = supabase
         .from('products')
-        .select('*, category:categories(*), images:product_images(*)', { count: 'exact' })
+        .select('*, images:product_images(*)')
         .eq('status', 'active')
 
       if (selectedCategories.length > 0) {
         query = query.in('category_id', selectedCategories)
       }
       if (category) {
-        query = query.eq('category.slug', category)
+        const { data: catData } = await supabase.from('categories').select('id').eq('slug', category).maybeSingle()
+        if (catData) query = query.eq('category_id', catData.id)
       }
       if (priceMin) query = query.gte('price', parseFloat(priceMin))
       if (priceMax) query = query.lte('price', parseFloat(priceMax))
@@ -102,15 +103,25 @@ export default function ProductsPage() {
         default: query = query.order('created_at', { ascending: false })
       }
 
+      const fetchCount = pageNum === 1 && !append
+      if (fetchCount) {
+        const { count } = await supabase
+          .from('products')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'active')
+          .then(({ count }) => ({ count }))
+        setHasMore(count ? count > PER_PAGE : false)
+      }
+
       const from = (pageNum - 1) * PER_PAGE
       const to = from + PER_PAGE - 1
       query = query.range(from, to)
 
-      const { data, count } = await query
+      const { data } = await query
 
       if (data) {
         setProducts(prev => append ? [...prev, ...data] : data)
-        setHasMore(count ? from + PER_PAGE < count : false)
+        if (!fetchCount) setHasMore(data.length >= PER_PAGE)
       }
     } catch {
       // empty
@@ -525,8 +536,6 @@ export default function ProductsPage() {
               )}
             </>
           )}
-        </div>
-      </div>
 
       {/* Mobile Filters Drawer */}
       <AnimatePresence>
@@ -732,8 +741,26 @@ export default function ProductsPage() {
               </div>
             </div>
           </div>
-        )}
-      </Modal>
+      )}
+    </Modal>
     </div>
+  </div>
+</div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="flex justify-center py-16">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+    </div>
+  )
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <ProductsPageContent />
+    </Suspense>
   )
 }

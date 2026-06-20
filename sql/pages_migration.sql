@@ -53,6 +53,23 @@ CREATE POLICY "Public homepage_sections read" ON homepage_sections FOR SELECT US
 DROP POLICY IF EXISTS "Admin all homepage_sections" ON homepage_sections;
 CREATE POLICY "Admin all homepage_sections" ON homepage_sections FOR ALL USING (is_admin());
 
+-- 23. shipping_methods
+CREATE TABLE IF NOT EXISTS shipping_methods (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  price NUMERIC NOT NULL DEFAULT 0,
+  delivery_time TEXT,
+  free_shipping_threshold NUMERIC
+);
+
+ALTER TABLE shipping_methods ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public shipping read" ON shipping_methods;
+CREATE POLICY "Public shipping read" ON shipping_methods FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin all shipping" ON shipping_methods;
+CREATE POLICY "Admin all shipping" ON shipping_methods FOR ALL USING (is_admin());
+
 INSERT INTO homepage_sections (section_key, title, subtitle, is_visible, sort_order) VALUES
 ('hero', 'Hero Banner', 'Main hero carousel', true, 1),
 ('categories', 'Shop by Category', 'Category grid', true, 2),

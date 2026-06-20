@@ -5,13 +5,14 @@ import Image from 'next/image'
 import { motion } from 'framer-motion'
 import {
   FileText, Plus, Eye, EyeOff, Trash2, Save, X, Bold, Italic,
-  Heading2, Heading3, List, ListOrdered, Image as ImageIcon, Link, Loader2
+  Heading2, Heading3, List, ListOrdered, Image as ImageIcon, Link, Loader2, Upload
 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import ImageExtension from '@tiptap/extension-image'
 import LinkExtension from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
+import { supabase } from '@/lib/supabase'
 import { adminFetch } from '@/lib/admin-fetch'
 import { cn, getImageUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -124,6 +125,25 @@ export default function AdminPages() {
     is_visible: true,
   })
   const [content, setContent] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [uploadingImage, setUploadingImage] = useState(false)
+
+  const uploadImage = async (file: File) => {
+    setUploadingImage(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const fileName = `pages/${editing?.slug || 'page'}-${Date.now()}.${ext}`
+      const { error } = await supabase.storage.from('product-images').upload(fileName, file)
+      if (error) throw error
+      const path = `product-images/${fileName}`
+      setImageUrl(path)
+      toast('Image uploaded', 'success')
+    } catch (err: any) {
+      toast(err.message || 'Upload failed', 'error')
+    } finally {
+      setUploadingImage(false)
+    }
+  }
 
   const editor = useEditor({
     extensions: [
@@ -176,6 +196,7 @@ export default function AdminPages() {
       is_visible: page.is_visible,
     })
     setContent(page.content || '')
+    setImageUrl(page.image_url || '')
     setModalOpen(true)
   }
 
@@ -196,6 +217,7 @@ export default function AdminPages() {
           meta_title: form.meta_title.trim() || null,
           meta_description: form.meta_description.trim() || null,
           is_visible: form.is_visible,
+          image_url: imageUrl || null,
         },
       })
       toast('Page updated', 'success')
@@ -369,6 +391,47 @@ export default function AdminPages() {
             <div className="border border-[rgba(0,0,0,0.12)] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:border-transparent">
               {editor && <EditorToolbar editor={editor} />}
               <EditorContent editor={editor} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[#1A1A1A] mb-2">
+              Hero Image
+            </label>
+            <div className="flex items-center gap-4">
+              <div className="relative w-32 h-20 rounded-xl bg-[#F5F5F0] overflow-hidden flex items-center justify-center border border-[rgba(0,0,0,0.06)]">
+                {imageUrl ? (
+                  <Image src={getImageUrl(imageUrl)} alt="Hero" fill className="object-cover" />
+                ) : (
+                  <ImageIcon className="w-6 h-6 text-[#6B6B6B]" />
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  id="page-image-upload"
+                  onChange={e => { if (e.target.files?.[0]) uploadImage(e.target.files[0]) }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={uploadingImage}
+                  onClick={() => document.getElementById('page-image-upload')?.click()}
+                >
+                  <Upload className="w-4 h-4 mr-2" /> Upload
+                </Button>
+                {imageUrl && (
+                  <button
+                    onClick={() => setImageUrl('')}
+                    className="text-xs text-[#DC2626] hover:underline text-left"
+                  >
+                    Remove
+                  </button>
+                )}
+                <span className="text-[10px] text-[#6B6B6B]">Shown at top of page</span>
+              </div>
             </div>
           </div>
 
