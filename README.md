@@ -123,3 +123,4 @@ npx vercel --prod
 Set all environment variables in Vercel's dashboard. No additional configuration needed.
 "# E-Commerce" 
 "# E-Commerce" 
+"# E-CommerceApp" 
