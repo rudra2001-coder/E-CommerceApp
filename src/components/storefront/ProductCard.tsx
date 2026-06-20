@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Heart, ShoppingBag } from 'lucide-react'
 import type { Product } from '@/types'
-import { formatCurrency, getSalePrice, cn } from '@/lib/utils'
+import { formatCurrency, getSalePrice, getImageUrl, cn } from '@/lib/utils'
 import { useCart } from '@/context/CartContext'
 import { useToast } from '@/components/ui/toast'
 
@@ -18,7 +18,7 @@ export function ProductCard({ product, priority }: ProductCardProps) {
   const { addItem } = useCart()
   const { toast } = useToast()
   const salePrice = getSalePrice(product)
-  const mainImage = product.images?.[0]?.image_url || '/placeholder.svg'
+  const mainImage = getImageUrl(product.images?.[0]?.image_url) || '/placeholder.svg'
   const isNew = product.created_at && new Date(product.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const handleAddToCart = (e: React.MouseEvent) => {

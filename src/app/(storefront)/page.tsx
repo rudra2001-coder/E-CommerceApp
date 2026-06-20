@@ -117,8 +117,8 @@ export default function HomePage() {
       try {
         const [categoriesRes, newRes, bestRes] = await Promise.all([
           supabase.from('categories').select('*').is('parent_id', null).order('sort_order'),
-          supabase.from('products').select('*, category:categories(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(8),
-          supabase.from('products').select('*, category:categories(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(8),
+          supabase.from('products').select('*, category:categories(*), images:product_images(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(8),
+          supabase.from('products').select('*, category:categories(*), images:product_images(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(8),
         ])
         if (categoriesRes.data) setCategories(categoriesRes.data)
         if (newRes.data) setNewArrivals(newRes.data)

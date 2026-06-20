@@ -10,7 +10,7 @@ import {
   RotateCcw, ChevronDown, Check, Star
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { cn, formatCurrency, getSalePrice, truncate } from '@/lib/utils'
+import { cn, formatCurrency, getSalePrice, getImageUrl, truncate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ProductCard } from '@/components/storefront/ProductCard'
@@ -64,7 +64,7 @@ export default function ProductDetailPage() {
           if (data.category_id) {
             const { data: related } = await supabase
               .from('products')
-              .select('*, category:categories(*)')
+              .select('*, category:categories(*), images:product_images(*)')
               .eq('category_id', data.category_id)
               .neq('id', data.id)
               .eq('status', 'active')
@@ -126,7 +126,7 @@ export default function ProductDetailPage() {
   }
 
   const salePrice = getSalePrice(product)
-  const images = product.images?.length ? product.images : [{ id: '0', product_id: product.id, image_url: '/placeholder.svg', sort_order: 0, alt_text: null }]
+  const images = product.images?.length ? product.images.map(i => ({ ...i, image_url: getImageUrl(i.image_url) })) : [{ id: '0', product_id: product.id, image_url: '/placeholder.svg', sort_order: 0, alt_text: null }]
   const outOfStock = product.stock_quantity <= 0 && !product.allow_backorders
   const reviewStats = Array.from({ length: 5 }, (_, i) => {
     const count = reviews.filter(r => r.rating === i + 1).length

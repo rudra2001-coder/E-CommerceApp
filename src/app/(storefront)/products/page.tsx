@@ -68,7 +68,7 @@ export default function ProductsPage() {
     try {
       let query = supabase
         .from('products')
-        .select('*, category:categories(*)', { count: 'exact' })
+        .select('*, category:categories(*), images:product_images(*)', { count: 'exact' })
         .eq('status', 'active')
 
       if (selectedCategories.length > 0) {
