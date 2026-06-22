@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -16,6 +16,7 @@ import { ProductCardSkeleton } from '@/components/ui/skeleton'
 import { QuantitySelector } from '@/components/storefront/QuantitySelector'
 import { useCart } from '@/context/CartContext'
 import { useToast } from '@/components/ui/toast'
+import { useDebounce } from '@/hooks/useDebounce'
 import type { Product, Category } from '@/types'
 
 const SORT_OPTIONS = [
@@ -25,13 +26,7 @@ const SORT_OPTIONS = [
   { value: 'bestselling', label: 'Best Selling' },
 ]
 
-const PRICE_RANGES = [
-  { label: 'Under $25', min: 0, max: 25 },
-  { label: '$25 - $50', min: 25, max: 50 },
-  { label: '$50 - $100', min: 50, max: 100 },
-  { label: '$100 - $250', min: 100, max: 250 },
-  { label: 'Over $250', min: 250, max: Infinity },
-]
+const PER_PAGE = 12
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -39,6 +34,12 @@ const fadeUp = {
 }
 
 const sortLabel = (value: string) => SORT_OPTIONS.find(o => o.value === value)?.label || value
+
+const validatePriceParam = (value: string | null): number | null => {
+  if (!value) return null
+  const num = parseFloat(value)
+  return !isNaN(num) && num >= 0 ? num : null
+}
 
 function ProductsPageContent() {
   const router = useRouter()
@@ -58,6 +59,7 @@ function ProductsPageContent() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
   const [quickViewQuantity, setQuickViewQuantity] = useState(1)
+  const [addingToCart, setAddingToCart] = useState(false)
 
   const category = searchParams.get('category') || ''
   const sort = searchParams.get('sort') || 'newest'
@@ -65,7 +67,14 @@ function ProductsPageContent() {
   const priceMax = searchParams.get('priceMax') || ''
   const selectedCategories = searchParams.getAll('cat')
 
-  const PER_PAGE = 12
+  const paramsString = searchParams.toString()
+
+  const [localPriceMin, setLocalPriceMin] = useState(priceMin)
+  const [localPriceMax, setLocalPriceMax] = useState(priceMax)
+  const debouncedPriceMin = useDebounce(localPriceMin, 300)
+  const debouncedPriceMax = useDebounce(localPriceMax, 300)
+
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const updateParams = useCallback((updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -76,27 +85,70 @@ function ProductsPageContent() {
     router.push(`/products?${params.toString()}`, { scroll: false })
   }, [searchParams, router])
 
+  useEffect(() => {
+    setLocalPriceMin(priceMin)
+  }, [priceMin])
+
+  useEffect(() => {
+    setLocalPriceMax(priceMax)
+  }, [priceMax])
+
+  useEffect(() => {
+    updateParams({
+      priceMin: debouncedPriceMin || null,
+      priceMax: debouncedPriceMax || null,
+    })
+  }, [debouncedPriceMin, debouncedPriceMax])
+
   const fetchProducts = useCallback(async (pageNum: number, append: boolean = false) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
     if (pageNum === 1 && !append) setLoading(true)
     else if (append) setLoadingMore(true)
 
     try {
+      const currentCategory = searchParams.get('category') || ''
+      const currentSort = searchParams.get('sort') || 'newest'
+      const currentPriceMin = searchParams.get('priceMin') || ''
+      const currentPriceMax = searchParams.get('priceMax') || ''
+      const currentSelectedCategories = searchParams.getAll('cat')
+
+      const validatedPriceMin = validatePriceParam(currentPriceMin)
+      const validatedPriceMax = validatePriceParam(currentPriceMax)
+
       let query = supabase
         .from('products')
         .select('*, images:product_images(*)')
         .eq('status', 'active')
 
-      if (selectedCategories.length > 0) {
-        query = query.in('category_id', selectedCategories)
+      if (currentSelectedCategories.length > 0) {
+        query = query.in('category_id', currentSelectedCategories)
       }
-      if (category) {
-        const { data: catData } = await supabase.from('categories').select('id').eq('slug', category).maybeSingle()
+
+      if (currentCategory) {
+        const { data: catData, error: catError } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('slug', currentCategory)
+          .maybeSingle()
+        if (catError) {
+          console.error('Failed to fetch category:', catError)
+          toast('Failed to load category filter.', 'error')
+          setLoading(false)
+          setLoadingMore(false)
+          return
+        }
         if (catData) query = query.eq('category_id', catData.id)
       }
-      if (priceMin) query = query.gte('price', parseFloat(priceMin))
-      if (priceMax) query = query.lte('price', parseFloat(priceMax))
 
-      switch (sort) {
+      if (validatedPriceMin !== null) query = query.gte('price', validatedPriceMin)
+      if (validatedPriceMax !== null) query = query.lte('price', validatedPriceMax)
+
+      switch (currentSort) {
         case 'price-asc': query = query.order('price', { ascending: true }); break
         case 'price-desc': query = query.order('price', { ascending: false }); break
         case 'newest':
@@ -105,11 +157,36 @@ function ProductsPageContent() {
 
       const fetchCount = pageNum === 1 && !append
       if (fetchCount) {
-        const { count } = await supabase
+        let countQuery = supabase
           .from('products')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'active')
-          .then(({ count }) => ({ count }))
+
+        if (currentSelectedCategories.length > 0) {
+          countQuery = countQuery.in('category_id', currentSelectedCategories)
+        }
+
+        if (currentCategory) {
+          const { data: catData } = await supabase
+            .from('categories')
+            .select('id')
+            .eq('slug', currentCategory)
+            .maybeSingle()
+          if (catData) countQuery = countQuery.eq('category_id', catData.id)
+        }
+
+        if (validatedPriceMin !== null) countQuery = countQuery.gte('price', validatedPriceMin)
+        if (validatedPriceMax !== null) countQuery = countQuery.lte('price', validatedPriceMax)
+
+        const { count, error: countError } = await countQuery.abortSignal(abortController.signal)
+        if (abortController.signal.aborted) return
+        if (countError) {
+          console.error('Failed to fetch product count:', countError)
+          toast('Failed to load product count.', 'error')
+          setLoading(false)
+          setLoadingMore(false)
+          return
+        }
         setHasMore(count ? count > PER_PAGE : false)
       }
 
@@ -117,35 +194,58 @@ function ProductsPageContent() {
       const to = from + PER_PAGE - 1
       query = query.range(from, to)
 
-      const { data } = await query
+      const { data, error } = await query.abortSignal(abortController.signal)
+
+      if (abortController.signal.aborted) return
+      if (error) {
+        console.error('Failed to fetch products:', error)
+        toast('Failed to load products. Please try again.', 'error')
+        setLoading(false)
+        setLoadingMore(false)
+        return
+      }
 
       if (data) {
         setProducts(prev => append ? [...prev, ...data] : data)
         if (!fetchCount) setHasMore(data.length >= PER_PAGE)
       }
-    } catch {
-      // empty
+    } catch (error) {
+      if (error && typeof error === 'object' && 'name' in error && (error as any).name === 'AbortError') return
+      if (error instanceof Error) {
+        console.error('Failed to fetch products:', error.message)
+      }
+      toast('Failed to load products. Please try again.', 'error')
     } finally {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [category, sort, priceMin, priceMax, selectedCategories])
+  }, [searchParams, toast])
 
   useEffect(() => {
     setPage(1)
-    fetchProducts(1)
-  }, [fetchProducts])
+    fetchProducts(1)?.catch(() => {})
+  }, [paramsString])
 
   useEffect(() => {
-    supabase.from('categories').select('*').is('parent_id', null).order('sort_order').then(({ data }) => {
+    const fetchCategories = async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .is('parent_id', null)
+        .order('sort_order')
+      if (error) {
+        console.error('Failed to fetch categories:', error)
+        return
+      }
       if (data) setCategories(data)
-    })
+    }
+    fetchCategories()
   }, [])
 
   const handleLoadMore = () => {
     const nextPage = page + 1
     setPage(nextPage)
-    fetchProducts(nextPage, true)
+    fetchProducts(nextPage, true)?.catch(() => {})
   }
 
   const toggleCategory = (catId: string) => {
@@ -153,7 +253,11 @@ function ProductsPageContent() {
     const idx = current.indexOf(catId)
     if (idx > -1) current.splice(idx, 1)
     else current.push(catId)
-    updateParams({ cat: current.length > 0 ? current.join(',') : null })
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('cat')
+    current.forEach(id => params.append('cat', id))
+    router.push(`/products?${params.toString()}`, { scroll: false })
   }
 
   const clearFilters = () => {
@@ -179,43 +283,54 @@ function ProductsPageContent() {
     }
   }
 
-  const handleQuickViewAddToCart = () => {
+  const handleQuickViewAddToCart = async () => {
     if (!quickViewProduct) return
-    const salePrice = getSalePrice(quickViewProduct)
-    const mainImage = getImageUrl(quickViewProduct.images?.[0]?.image_url) || '/placeholder.svg'
-    const variantLabel = Object.values(selectedOptions).join(', ')
+    setAddingToCart(true)
+    try {
+      const salePrice = getSalePrice(quickViewProduct)
+      const mainImage = getImageUrl(quickViewProduct.images?.[0]?.image_url) || '/placeholder.svg'
+      const variantLabel = Object.values(selectedOptions).join(', ')
 
-    let variantId: string | null = null
-    let variantPrice = salePrice || quickViewProduct.price
-    let variantStock = quickViewProduct.stock_quantity
+      let variantId: string | null = null
+      let variantPrice = salePrice || quickViewProduct.price
+      let variantStock = quickViewProduct.stock_quantity
 
-    if (quickViewProduct.variants && quickViewProduct.variants.length > 0 && Object.keys(selectedOptions).length > 0) {
-      const matching = quickViewProduct.variants.find(v =>
-        Object.entries(selectedOptions).every(([key, val]) => v.option_values[key] === val)
-      )
-      if (matching) {
-        variantId = matching.id
-        variantPrice = matching.price ?? variantPrice
-        variantStock = matching.stock_quantity
+      if (quickViewProduct.variants && quickViewProduct.variants.length > 0 && Object.keys(selectedOptions).length > 0) {
+        const matching = quickViewProduct.variants.find(v =>
+          Object.entries(selectedOptions).every(([key, val]) => v.option_values?.[key] === val)
+        )
+        if (matching) {
+          variantId = matching.id
+          variantPrice = matching.price ?? variantPrice
+          variantStock = matching.stock_quantity
+        }
       }
+
+      if (quickViewQuantity > variantStock && !quickViewProduct.allow_backorders) {
+        toast('Not enough stock available.', 'error')
+        setAddingToCart(false)
+        return
+      }
+
+      addItem({
+        id: quickViewProduct.id,
+        product_id: quickViewProduct.id,
+        variant_id: variantId,
+        title: quickViewProduct.title,
+        price: variantPrice,
+        quantity: quickViewQuantity,
+        image: mainImage,
+        variant_label: variantLabel,
+        sku: quickViewProduct.sku,
+        max_quantity: variantStock,
+      })
+      toast('Added to cart', 'success')
+      setQuickViewProduct(null)
+    } catch (err) {
+      toast('Failed to add to cart', 'error')
+    } finally {
+      setAddingToCart(false)
     }
-
-    if (quickViewQuantity > variantStock && !quickViewProduct.allow_backorders) return
-
-    addItem({
-      id: quickViewProduct.id,
-      product_id: quickViewProduct.id,
-      variant_id: variantId,
-      title: quickViewProduct.title,
-      price: variantPrice,
-      quantity: quickViewQuantity,
-      image: mainImage,
-      variant_label: variantLabel,
-      sku: quickViewProduct.sku,
-      max_quantity: variantStock,
-    })
-    toast('Added to cart', 'success')
-    setQuickViewProduct(null)
   }
 
   return (
@@ -243,6 +358,7 @@ function ProductsPageContent() {
                       checked={selectedCategories.includes(cat.id)}
                       onChange={() => toggleCategory(cat.id)}
                       className="w-4 h-4 rounded border-[rgba(0,0,0,0.2)] text-[#2563EB] focus:ring-[#2563EB]"
+                      aria-label={`Filter by category: ${cat.name}`}
                     />
                     <span className="text-sm text-[#6B6B6B] group-hover:text-[#1A1A1A] transition-colors">
                       {cat.name}
@@ -259,17 +375,19 @@ function ProductsPageContent() {
                 <Input
                   type="number"
                   placeholder="Min"
-                  value={priceMin}
-                  onChange={e => updateParams({ priceMin: e.target.value || null })}
+                  value={localPriceMin}
+                  onChange={e => setLocalPriceMin(e.target.value)}
                   className="h-9 text-xs"
+                  aria-label="Minimum price"
                 />
                 <span className="text-[#6B6B6B] self-center">—</span>
                 <Input
                   type="number"
                   placeholder="Max"
-                  value={priceMax}
-                  onChange={e => updateParams({ priceMax: e.target.value || null })}
+                  value={localPriceMax}
+                  onChange={e => setLocalPriceMax(e.target.value)}
                   className="h-9 text-xs"
+                  aria-label="Maximum price"
                 />
               </div>
             </div>
@@ -281,6 +399,7 @@ function ProductsPageContent() {
                 value={sort}
                 onChange={e => updateParams({ sort: e.target.value })}
                 className="w-full h-10 px-3 text-sm bg-white border border-[rgba(0,0,0,0.12)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                aria-label="Sort products by"
               >
                 {SORT_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -297,6 +416,7 @@ function ProductsPageContent() {
             size="md"
             onClick={() => setMobileFiltersOpen(true)}
             className="shadow-lg"
+            aria-label="Open filters"
           >
             <SlidersHorizontal className="w-4 h-4 mr-2" />
             Filters & Sort
@@ -320,7 +440,7 @@ function ProductsPageContent() {
                   return cat ? (
                     <span key={catId} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2563EB]/10 text-[#2563EB] text-xs font-medium rounded-full">
                       Category: {cat.name}
-                      <button onClick={() => toggleCategory(catId)} className="hover:bg-[#2563EB]/20 rounded-full p-0.5">
+                      <button onClick={() => toggleCategory(catId)} className="hover:bg-[#2563EB]/20 rounded-full p-0.5" aria-label={`Remove category filter: ${cat.name}`}>
                         <X className="w-3 h-3" />
                       </button>
                     </span>
@@ -329,7 +449,7 @@ function ProductsPageContent() {
                 {priceMin && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2563EB]/10 text-[#2563EB] text-xs font-medium rounded-full">
                     Min: ${priceMin}
-                    <button onClick={() => updateParams({ priceMin: null })} className="hover:bg-[#2563EB]/20 rounded-full p-0.5">
+                    <button onClick={() => updateParams({ priceMin: null })} className="hover:bg-[#2563EB]/20 rounded-full p-0.5" aria-label="Remove minimum price filter">
                       <X className="w-3 h-3" />
                     </button>
                   </span>
@@ -337,7 +457,7 @@ function ProductsPageContent() {
                 {priceMax && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2563EB]/10 text-[#2563EB] text-xs font-medium rounded-full">
                     Max: ${priceMax}
-                    <button onClick={() => updateParams({ priceMax: null })} className="hover:bg-[#2563EB]/20 rounded-full p-0.5">
+                    <button onClick={() => updateParams({ priceMax: null })} className="hover:bg-[#2563EB]/20 rounded-full p-0.5" aria-label="Remove maximum price filter">
                       <X className="w-3 h-3" />
                     </button>
                   </span>
@@ -345,12 +465,12 @@ function ProductsPageContent() {
                 {sort !== 'newest' && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2563EB]/10 text-[#2563EB] text-xs font-medium rounded-full">
                     Sort: {sortLabel(sort)}
-                    <button onClick={() => updateParams({ sort: null })} className="hover:bg-[#2563EB]/20 rounded-full p-0.5">
+                    <button onClick={() => updateParams({ sort: null })} className="hover:bg-[#2563EB]/20 rounded-full p-0.5" aria-label="Reset sort order">
                       <X className="w-3 h-3" />
                     </button>
                   </span>
                 )}
-                <button onClick={clearFilters} className="text-xs text-[#6B6B6B] hover:text-[#DC2626] underline ml-2 transition-colors">
+                <button onClick={clearFilters} className="text-xs text-[#6B6B6B] hover:text-[#DC2626] underline ml-2 transition-colors" aria-label="Clear all filters">
                   Clear all
                 </button>
               </motion.div>
@@ -554,10 +674,13 @@ function ProductsPageContent() {
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-[#FAFAFA] p-6 overflow-y-auto"
               onClick={e => e.stopPropagation()}
+              role="dialog"
+              aria-label="Filters"
+              aria-modal="true"
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="font-serif text-lg font-bold">Filters</h2>
-                <button onClick={() => setMobileFiltersOpen(false)} className="p-2 rounded-xl hover:bg-[#F5F5F0]">
+                <button onClick={() => setMobileFiltersOpen(false)} className="p-2 rounded-xl hover:bg-[#F5F5F0]" aria-label="Close filters">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -569,6 +692,7 @@ function ProductsPageContent() {
                     value={sort}
                     onChange={e => updateParams({ sort: e.target.value })}
                     className="w-full h-11 px-3 text-sm bg-white border border-[rgba(0,0,0,0.12)] rounded-xl"
+                    aria-label="Sort products by"
                   >
                     {SORT_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -586,6 +710,7 @@ function ProductsPageContent() {
                           checked={selectedCategories.includes(cat.id)}
                           onChange={() => toggleCategory(cat.id)}
                           className="w-4 h-4 rounded border-[rgba(0,0,0,0.2)] text-[#2563EB]"
+                          aria-label={`Filter by category: ${cat.name}`}
                         />
                         <span className="text-sm">{cat.name}</span>
                       </label>
@@ -599,15 +724,17 @@ function ProductsPageContent() {
                     <Input
                       type="number"
                       placeholder="Min"
-                      value={priceMin}
-                      onChange={e => updateParams({ priceMin: e.target.value || null })}
+                      value={localPriceMin}
+                      onChange={e => setLocalPriceMin(e.target.value)}
+                      aria-label="Minimum price"
                     />
                     <span className="text-[#6B6B6B] self-center">—</span>
                     <Input
                       type="number"
                       placeholder="Max"
-                      value={priceMax}
-                      onChange={e => updateParams({ priceMax: e.target.value || null })}
+                      value={localPriceMax}
+                      onChange={e => setLocalPriceMax(e.target.value)}
+                      aria-label="Maximum price"
                     />
                   </div>
                 </div>
@@ -651,6 +778,7 @@ function ProductsPageContent() {
                         'relative w-16 h-16 shrink-0 rounded-lg overflow-hidden border-2 transition-all',
                         idx === selectedImageIndex ? 'border-[#2563EB]' : 'border-transparent opacity-60 hover:opacity-100'
                       )}
+                      aria-label={`View image ${idx + 1}`}
                     >
                       <Image
                         src={getImageUrl(img.image_url) || '/placeholder.svg'}
@@ -721,6 +849,13 @@ function ProductsPageContent() {
                 </div>
               )}
 
+              {/* Stock Status */}
+              {quickViewProduct.stock_quantity <= 5 && quickViewProduct.stock_quantity > 0 && (
+                <p className="text-sm text-orange-500 font-medium mb-2">
+                  Only {quickViewProduct.stock_quantity} left in stock
+                </p>
+              )}
+
               {/* Quantity & Add to Cart */}
               <div className="mt-auto flex items-center gap-4">
                 <QuantitySelector
@@ -732,7 +867,8 @@ function ProductsPageContent() {
                   variant="primary"
                   size="md"
                   onClick={handleQuickViewAddToCart}
-                  disabled={quickViewProduct.stock_quantity <= 0}
+                  disabled={quickViewProduct.stock_quantity <= 0 || addingToCart}
+                  loading={addingToCart}
                   className="flex-1"
                 >
                   <ShoppingBag className="w-4 h-4 mr-2" />
