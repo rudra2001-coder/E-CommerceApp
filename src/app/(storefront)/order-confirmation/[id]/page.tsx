@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Check, ArrowRight, Package, Truck, Clock } from 'lucide-react'
+import { Check, ArrowRight, Package, Truck, Clock, Smartphone } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency, generateOrderNumber } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -65,6 +65,18 @@ export default function OrderConfirmationPage() {
 
         <h1 className="font-serif text-3xl md:text-4xl font-bold mb-2">Order Confirmed!</h1>
         <p className="text-[#6B6B6B] mb-2">Thank you for your purchase.</p>
+        {order?.payment_method === 'cod' && (
+          <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-xl px-4 py-2 mb-6 text-sm font-medium">
+            <Truck className="w-4 h-4" />
+            Pay {formatCurrency(order.total)} in cash on delivery
+          </div>
+        )}
+        {(order?.payment_method === 'bkash' || order?.payment_method === 'nagad' || order?.payment_method === 'rocket') && (
+          <div className="inline-flex items-center gap-2 bg-pink-50 text-pink-700 rounded-xl px-4 py-2 mb-6 text-sm font-medium">
+            <Smartphone className="w-4 h-4" />
+            Pay {formatCurrency(order.total)} via {order.payment_method === 'bkash' ? 'bKash' : order.payment_method === 'nagad' ? 'Nagad' : 'Rocket'}
+          </div>
+        )}
 
         {loading ? (
           <div className="animate-pulse space-y-3 py-8">

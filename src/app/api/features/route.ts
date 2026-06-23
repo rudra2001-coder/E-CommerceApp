@@ -4,10 +4,11 @@ import { NextResponse } from 'next/server'
 export async function GET() {
   const supabase = supabaseAdmin()
   const { data, error } = await supabase
-    .from('site_settings')
+    .from('features')
     .select('*')
-    .maybeSingle()
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data || {}, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } })
+  return NextResponse.json(data || [])
 }

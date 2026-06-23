@@ -8,16 +8,17 @@ import { Search, ShoppingBag, User, Menu, X, Heart, ChevronDown, LogIn } from 'l
 import { useCart } from '@/context/CartContext'
 import { useAuth } from '@/context/AuthContext'
 import { useSignIn } from '@/context/SignInContext'
-import { cn } from '@/lib/utils'
+import { cn, getImageUrl } from '@/lib/utils'
+import type { SiteSettings } from '@/types'
 
-const navLinks = [
+const defaultNav = [
   { href: '/', label: 'Home' },
   { href: '/products', label: 'Shop' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },
 ]
 
-export function Header() {
+export function Header({ settings }: { settings?: SiteSettings | null }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const { itemCount, openCart } = useCart()
@@ -26,6 +27,8 @@ export function Header() {
 
   const displayName = profile?.full_name || lightCustomer?.full_name || user?.email?.split('@')[0] || ''
   const isSignedIn = !!(user || lightCustomer)
+  const siteName = settings?.site_name || 'STORE'
+  const logoUrl = settings?.logo_url
 
   return (
     <header className="sticky top-0 z-40 bg-[#FAFAFA]/90 backdrop-blur-md border-b border-[rgba(0,0,0,0.06)]">
@@ -38,17 +41,21 @@ export function Header() {
             <Menu className="w-5 h-5" />
           </button>
 
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center">
-              <span className="text-white font-bold text-sm">S</span>
-            </div>
-            <span className="font-serif text-xl font-bold tracking-tight text-[#1A1A1A] hidden sm:block">
-              STORE
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            {logoUrl ? (
+              <Image src={getImageUrl(logoUrl)} alt={siteName} width={32} height={32} className="object-contain rounded-lg" />
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center">
+                <span className="text-white font-bold text-sm">{siteName[0]}</span>
+              </div>
+            )}
+            <span className="font-serif text-xl font-bold tracking-tight text-[#1A1A1A] hidden sm:block truncate max-w-[200px]">
+              {siteName}
             </span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map(link => (
+            {defaultNav.map(link => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -132,10 +139,14 @@ export function Header() {
             >
               <div className="flex items-center justify-between mb-8">
                 <Link href="/" className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">S</span>
-                  </div>
-                  <span className="font-serif text-xl font-bold">STORE</span>
+                  {logoUrl ? (
+                    <Image src={getImageUrl(logoUrl)} alt={siteName} width={32} height={32} className="object-contain rounded-lg" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">{siteName[0]}</span>
+                    </div>
+                  )}
+                  <span className="font-serif text-xl font-bold">{siteName}</span>
                 </Link>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
@@ -145,7 +156,7 @@ export function Header() {
                 </button>
               </div>
               <nav className="flex flex-col gap-1">
-                {navLinks.map(link => (
+                {defaultNav.map(link => (
                   <Link
                     key={link.href}
                     href={link.href}

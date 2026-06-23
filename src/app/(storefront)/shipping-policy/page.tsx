@@ -1,96 +1,55 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Truck, Clock, Package, Globe } from 'lucide-react'
+import { Package, Truck, Globe, Clock } from 'lucide-react'
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+const hardcoded = {
+  title: 'Shipping Policy',
+  content: `<section><h2>Shipping Options</h2><p>We offer various shipping options to meet your needs. Standard shipping (5-7 business days) is free on orders over $50. Express shipping (2-3 business days) and Overnight shipping (next business day) are available at additional cost.</p></section>
+<section><h2>Processing Time</h2><p>Orders are processed within 1-2 business days. You will receive a confirmation email once your order ships.</p></section>
+<section><h2>International Shipping</h2><p>We ship to most countries worldwide. International delivery typically takes 7-14 business days. Customs fees and import duties may apply and are the responsibility of the customer.</p></section>
+<section><h2>Tracking</h2><p>Once your order ships, you will receive a tracking number via email. You can also track your order in your account dashboard.</p></section>`
 }
 
+const features = [
+  { icon: Package, title: 'Careful Packaging', desc: 'Your items are securely packed' },
+  { icon: Truck, title: 'Free Shipping', desc: 'On orders over $50' },
+  { icon: Clock, title: 'Fast Processing', desc: 'Orders ship within 1-2 days' },
+  { icon: Globe, title: 'International', desc: 'Worldwide shipping available' },
+]
+
 export default function ShippingPolicyPage() {
+  const [cms, setCms] = useState<{ title?: string; content?: string }>({})
+
+  useEffect(() => {
+    fetch('/api/pages/shipping-policy')
+      .then(res => res.ok ? res.json() : {})
+      .then(data => setCms(data))
+      .catch(() => {})
+  }, [])
+
+  const title = cms.title || hardcoded.title
+  const content = cms.content || hardcoded.content
+
   return (
     <div className="mx-auto max-w-[1440px] px-6 md:px-16 py-16 md:py-24">
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} className="max-w-3xl mx-auto">
-        <h1 className="font-serif text-3xl md:text-4xl font-bold mb-2">Shipping Policy</h1>
-        <p className="text-sm text-[#6B6B6B] mb-8">Last updated: January 2026</p>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto">
+        <h1 className="font-serif text-3xl md:text-4xl font-bold mb-8">{title}</h1>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
-          {[
-            { icon: Truck, title: 'Free Shipping', desc: 'On all orders over $50 within the US.' },
-            { icon: Clock, title: 'Fast Processing', desc: 'Orders ship within 1-2 business days.' },
-            { icon: Package, title: 'Careful Packaging', desc: 'Every order is packed with care.' },
-            { icon: Globe, title: 'International', desc: 'Shipping to 50+ countries worldwide.' },
-          ].map(item => (
-            <div key={item.title} className="flex items-start gap-4 p-4 rounded-xl bg-[#F5F5F0]">
-              <div className="w-10 h-10 rounded-xl bg-[#2563EB]/10 flex items-center justify-center shrink-0">
-                <item.icon className="w-5 h-5 text-[#2563EB]" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+          {features.map((f, i) => (
+            <motion.div key={f.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="text-center p-4 bg-[#F8F9FA] rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-[#2563EB]/5 flex items-center justify-center mx-auto mb-2">
+                <f.icon className="w-5 h-5 text-[#2563EB]" />
               </div>
-              <div>
-                <h3 className="font-medium text-sm">{item.title}</h3>
-                <p className="text-xs text-[#6B6B6B]">{item.desc}</p>
-              </div>
-            </div>
+              <h3 className="text-sm font-semibold">{f.title}</h3>
+              <p className="text-xs text-[#6B6B6B] mt-0.5">{f.desc}</p>
+            </motion.div>
           ))}
         </div>
 
-        <div className="prose prose-sm max-w-none text-[#6B6B6B] space-y-6">
-          <section>
-            <h2 className="font-serif text-xl font-bold text-[#1A1A1A] mb-3">Shipping Methods & Rates</h2>
-            <p>We offer the following shipping options for domestic US orders:</p>
-            <table className="w-full text-sm mt-3">
-              <thead>
-                <tr className="border-b border-[rgba(0,0,0,0.1)]">
-                  <th className="text-left py-2 font-medium">Method</th>
-                  <th className="text-left py-2 font-medium">Delivery Time</th>
-                  <th className="text-right py-2 font-medium">Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-[rgba(0,0,0,0.06)]">
-                  <td className="py-2">Standard</td>
-                  <td className="py-2">5-7 business days</td>
-                  <td className="py-2 text-right">Free over $50 / $5.99</td>
-                </tr>
-                <tr className="border-b border-[rgba(0,0,0,0.06)]">
-                  <td className="py-2">Express</td>
-                  <td className="py-2">2-3 business days</td>
-                  <td className="py-2 text-right">$12.99</td>
-                </tr>
-                <tr>
-                  <td className="py-2">Overnight</td>
-                  <td className="py-2">1 business day</td>
-                  <td className="py-2 text-right">$24.99</td>
-                </tr>
-              </tbody>
-            </table>
-          </section>
-
-          <section>
-            <h2 className="font-serif text-xl font-bold text-[#1A1A1A] mb-3">Processing Time</h2>
-            <p>Orders are processed within 1-2 business days after payment confirmation. Orders placed on weekends or holidays begin processing the next business day. Custom or personalized items may require additional processing time.</p>
-          </section>
-
-          <section>
-            <h2 className="font-serif text-xl font-bold text-[#1A1A1A] mb-3">International Shipping</h2>
-            <p>We ship internationally to over 50 countries. International shipping rates are calculated at checkout based on destination, package weight, and selected method. Delivery times vary by location (typically 7-21 business days). Customs duties and taxes are the responsibility of the recipient.</p>
-          </section>
-
-          <section>
-            <h2 className="font-serif text-xl font-bold text-[#1A1A1A] mb-3">Order Tracking</h2>
-            <p>Once your order ships, you will receive a confirmation email with a tracking number. You can also track your order from your Account dashboard. Please allow 24-48 hours for tracking information to update.</p>
-          </section>
-
-          <section>
-            <h2 className="font-serif text-xl font-bold text-[#1A1A1A] mb-3">Shipping Address</h2>
-            <p>We are not responsible for orders shipped to incorrect addresses. Please verify your shipping address before completing checkout. If you notice an error after placing an order, contact us immediately to attempt a correction.</p>
-          </section>
-
-          <section>
-            <h2 className="font-serif text-xl font-bold text-[#1A1A1A] mb-3">Lost or Damaged Items</h2>
-            <p>If your package arrives damaged, please contact us within 48 hours with photos of the damage. For lost packages, we will initiate a trace with the carrier and work to resolve the issue as quickly as possible.</p>
-          </section>
-        </div>
+        <div className="prose prose-sm max-w-none text-[#6B6B6B] space-y-6" dangerouslySetInnerHTML={{ __html: content }} />
       </motion.div>
     </div>
   )

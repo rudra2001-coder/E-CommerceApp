@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       shipping_cost,
       coupon_code,
       notes,
+      payment_method,
     } = await request.json()
 
     if (!email || !items || !items.length) {
@@ -165,6 +166,7 @@ export async function POST(request: NextRequest) {
         total,
         coupon_code: coupon_code || null,
         notes: notes || null,
+        payment_method: payment_method || 'cod',
       })
       .select()
       .single()

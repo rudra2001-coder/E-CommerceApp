@@ -6,7 +6,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SlidersHorizontal, X, ChevronDown, Loader2, LayoutGrid, List, Eye, ShoppingBag } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { cn, formatCurrency, getSalePrice, getImageUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -117,98 +116,28 @@ function ProductsPageContent() {
       const currentPriceMax = searchParams.get('priceMax') || ''
       const currentSelectedCategories = searchParams.getAll('cat')
 
-      const validatedPriceMin = validatePriceParam(currentPriceMin)
-      const validatedPriceMax = validatePriceParam(currentPriceMax)
+      const params = new URLSearchParams()
+      if (currentSelectedCategories.length > 0) params.set('categories', currentSelectedCategories.join(','))
+      if (currentCategory) params.set('category_slug', currentCategory)
+      if (currentPriceMin) params.set('min_price', currentPriceMin)
+      if (currentPriceMax) params.set('max_price', currentPriceMax)
+      params.set('sort', currentSort === 'price-asc' ? 'price_asc' : currentSort === 'price-desc' ? 'price_desc' : currentSort)
+      params.set('page', String(pageNum))
+      params.set('limit', String(PER_PAGE))
 
-      let query = supabase
-        .from('products')
-        .select('*, images:product_images(*)')
-        .eq('status', 'active')
-
-      if (currentSelectedCategories.length > 0) {
-        query = query.in('category_id', currentSelectedCategories)
-      }
-
-      if (currentCategory) {
-        const { data: catData, error: catError } = await supabase
-          .from('categories')
-          .select('id')
-          .eq('slug', currentCategory)
-          .maybeSingle()
-        if (catError) {
-          console.error('Failed to fetch category:', catError)
-          toast('Failed to load category filter.', 'error')
-          setLoading(false)
-          setLoadingMore(false)
-          return
-        }
-        if (catData) query = query.eq('category_id', catData.id)
-      }
-
-      if (validatedPriceMin !== null) query = query.gte('price', validatedPriceMin)
-      if (validatedPriceMax !== null) query = query.lte('price', validatedPriceMax)
-
-      switch (currentSort) {
-        case 'price-asc': query = query.order('price', { ascending: true }); break
-        case 'price-desc': query = query.order('price', { ascending: false }); break
-        case 'newest':
-        default: query = query.order('created_at', { ascending: false })
-      }
-
-      const fetchCount = pageNum === 1 && !append
-      if (fetchCount) {
-        let countQuery = supabase
-          .from('products')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'active')
-
-        if (currentSelectedCategories.length > 0) {
-          countQuery = countQuery.in('category_id', currentSelectedCategories)
-        }
-
-        if (currentCategory) {
-          const { data: catData } = await supabase
-            .from('categories')
-            .select('id')
-            .eq('slug', currentCategory)
-            .maybeSingle()
-          if (catData) countQuery = countQuery.eq('category_id', catData.id)
-        }
-
-        if (validatedPriceMin !== null) countQuery = countQuery.gte('price', validatedPriceMin)
-        if (validatedPriceMax !== null) countQuery = countQuery.lte('price', validatedPriceMax)
-
-        const { count, error: countError } = await countQuery.abortSignal(abortController.signal)
-        if (abortController.signal.aborted) return
-        if (countError) {
-          console.error('Failed to fetch product count:', countError)
-          toast('Failed to load product count.', 'error')
-          setLoading(false)
-          setLoadingMore(false)
-          return
-        }
-        setHasMore(count ? count > PER_PAGE : false)
-      }
-
-      const from = (pageNum - 1) * PER_PAGE
-      const to = from + PER_PAGE - 1
-      query = query.range(from, to)
-
-      const { data, error } = await query.abortSignal(abortController.signal)
-
+      const res = await fetch(`/api/products?${params.toString()}`, { signal: abortController.signal })
       if (abortController.signal.aborted) return
-      if (error) {
-        console.error('Failed to fetch products:', error)
+
+      if (!res.ok) {
         toast('Failed to load products. Please try again.', 'error')
         setLoading(false)
         setLoadingMore(false)
         return
       }
 
-      if (data) {
-        setProducts(prev => append ? [...prev, ...data] : data)
-        if (!fetchCount) setHasMore(data.length >= PER_PAGE)
-      }
+      const data = await res.json()
+      setProducts(prev => append ? [...prev, ...data.products] : data.products)
+      setHasMore(data.products.length >= PER_PAGE)
     } catch (error) {
       if (error && typeof error === 'object' && 'name' in error && (error as any).name === 'AbortError') return
       if (error instanceof Error) {
@@ -227,19 +156,10 @@ function ProductsPageContent() {
   }, [paramsString])
 
   useEffect(() => {
-    const fetchCategories = async () => {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .is('parent_id', null)
-        .order('sort_order')
-      if (error) {
-        console.error('Failed to fetch categories:', error)
-        return
-      }
-      if (data) setCategories(data)
-    }
-    fetchCategories()
+    fetch('/api/categories')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => { if (data.length > 0) setCategories(data) })
+      .catch(() => {})
   }, [])
 
   const handleLoadMore = () => {

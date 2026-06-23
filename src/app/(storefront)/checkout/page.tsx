@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { CreditCard, Truck, User, MapPin } from 'lucide-react'
+import { CreditCard, Truck, User, MapPin, Smartphone, Building2, Banknote } from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,13 @@ interface CheckoutForm {
   zip: string
   country: string
 }
+
+type PaymentMethod = 'cod' | 'bkash' | 'nagad' | 'rocket' | 'card'
+
+const bdDivisions = [
+  'Dhaka', 'Chattogram', 'Rajshahi', 'Khulna', 'Barishal',
+  'Sylhet', 'Rangpur', 'Mymensingh',
+]
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -45,14 +52,15 @@ export default function CheckoutPage() {
     city: '',
     state: '',
     zip: '',
-    country: 'US',
+    country: 'Bangladesh',
   })
   const [errors, setErrors] = useState<Partial<CheckoutForm>>({})
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card'>('cod')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
   const [processing, setProcessing] = useState(false)
+  const [mobileNumber, setMobileNumber] = useState('')
 
   const shippingCost = 0
-  const tax = subtotal * 0.08
+  const tax = subtotal * 0.05
   const total = subtotal + shippingCost + tax
 
   useEffect(() => {
@@ -65,10 +73,14 @@ export default function CheckoutPage() {
     if (!form.email.trim()) errs.email = 'Required'
     else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = 'Invalid email'
     if (!form.phone.trim()) errs.phone = 'Required'
+    else if (!/^01[3-9]\d{8}$/.test(form.phone.replace(/[^0-9]/g, ''))) errs.phone = 'Valid BD number needed (01XXXXXXXXX)'
     if (!form.address_line1.trim()) errs.address_line1 = 'Required'
     if (!form.city.trim()) errs.city = 'Required'
     if (!form.state.trim()) errs.state = 'Required'
-    if (!form.zip.trim()) errs.zip = 'Required'
+    if (paymentMethod === 'bkash' || paymentMethod === 'nagad' || paymentMethod === 'rocket') {
+      if (!mobileNumber.trim()) errs.zip = 'Mobile number required'
+      else if (!/^01[3-9]\d{8}$/.test(mobileNumber.replace(/[^0-9]/g, ''))) errs.zip = 'Valid BD number needed'
+    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -103,6 +115,7 @@ export default function CheckoutPage() {
           billing_address: form,
           shipping_method: 'Standard Shipping',
           shipping_cost: shippingCost,
+          payment_method: paymentMethod,
         }),
       })
 
@@ -115,6 +128,13 @@ export default function CheckoutPage() {
       if (paymentMethod === 'cod') {
         clearCart()
         toast('Order placed! Pay on delivery.', 'success')
+        router.push(`/order-confirmation/${order.id}`)
+        return
+      }
+
+      if (paymentMethod === 'bkash' || paymentMethod === 'nagad' || paymentMethod === 'rocket') {
+        clearCart()
+        toast(`Order placed! Pay via ${paymentMethod === 'bkash' ? 'bKash' : paymentMethod === 'nagad' ? 'Nagad' : 'Rocket'} (${mobileNumber}).`, 'success')
         router.push(`/order-confirmation/${order.id}`)
         return
       }
@@ -236,43 +256,53 @@ export default function CheckoutPage() {
           <motion.div initial="hidden" animate="visible" variants={fadeUp}>
             <h2 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-[#2563EB]" />
-              Shipping Address
+              Delivery Address
             </h2>
             <div className="space-y-4">
               <Input
-                label="Address Line 1"
+                label="House / Street / Village"
                 id="address_line1"
+                placeholder="House 12, Road 5, Gulshan"
                 value={form.address_line1}
                 onChange={e => updateField('address_line1', e.target.value)}
                 error={errors.address_line1}
               />
               <Input
-                label="Address Line 2 (Optional)"
+                label="Area / Landmark (Optional)"
                 id="address_line2"
+                placeholder="Near Jamuna Future Park"
                 value={form.address_line2}
                 onChange={e => updateField('address_line2', e.target.value)}
               />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#1A1A1A] mb-1.5">Division</label>
+                  <select
+                    value={form.state}
+                    onChange={e => updateField('state', e.target.value)}
+                    className={cn('w-full h-11 px-3 text-sm bg-white border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]', errors.state ? 'border-[#DC2626]' : 'border-[rgba(0,0,0,0.12)]')}
+                  >
+                    <option value="">Select Division</option>
+                    {bdDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  {errors.state && <p className="text-xs text-[#DC2626] mt-1">{errors.state}</p>}
+                </div>
                 <Input
-                  label="City"
+                  label="District"
                   id="city"
+                  placeholder="Dhaka"
                   value={form.city}
                   onChange={e => updateField('city', e.target.value)}
                   error={errors.city}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="State"
-                  id="state"
-                  value={form.state}
-                  onChange={e => updateField('state', e.target.value)}
-                  error={errors.state}
-                />
-                <Input
-                  label="ZIP Code"
+                  label="Upazila / Thana"
                   id="zip"
+                  placeholder="Gulshan"
                   value={form.zip}
                   onChange={e => updateField('zip', e.target.value)}
-                  error={errors.zip}
                 />
                 <Input
                   label="Country"
@@ -287,52 +317,101 @@ export default function CheckoutPage() {
           {/* Payment */}
           <motion.div initial="hidden" animate="visible" variants={fadeUp}>
             <h2 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-[#2563EB]" />
+              <Banknote className="w-4 h-4 text-[#2563EB]" />
               Payment Method
             </h2>
             <div className="space-y-3">
+              {/* Cash on Delivery */}
               <label className={cn(
                 'flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all',
                 paymentMethod === 'cod' ? 'border-[#2563EB] bg-[#2563EB]/5 ring-1 ring-[#2563EB]/20' : 'border-[rgba(0,0,0,0.1)] hover:border-[rgba(0,0,0,0.2)]'
               )}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="cod"
-                  checked={paymentMethod === 'cod'}
-                  onChange={() => setPaymentMethod('cod')}
-                  className="text-[#2563EB] focus:ring-[#2563EB]"
-                />
+                <input type="radio" name="payment" value="cod" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="text-[#2563EB] focus:ring-[#2563EB]" />
                 <div className="w-12 h-8 bg-emerald-50 rounded-lg flex items-center justify-center">
                   <Truck className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium">Cash on Delivery</p>
-                  <p className="text-xs text-[#6B6B6B]">Pay when you receive your order. No card needed.</p>
+                  <p className="text-xs text-[#6B6B6B]">Pay in cash when your order arrives at your door</p>
                 </div>
               </label>
 
+              {/* bKash */}
+              <label className={cn(
+                'flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all',
+                paymentMethod === 'bkash' ? 'border-[#E2136E] bg-[#E2136E]/5 ring-1 ring-[#E2136E]/20' : 'border-[rgba(0,0,0,0.1)] hover:border-[rgba(0,0,0,0.2)]'
+              )}>
+                <input type="radio" name="payment" value="bkash" checked={paymentMethod === 'bkash'} onChange={() => setPaymentMethod('bkash')} className="text-[#E2136E] focus:ring-[#E2136E]" />
+                <div className="w-12 h-8 bg-pink-50 rounded-lg flex items-center justify-center">
+                  <Smartphone className="w-5 h-5 text-pink-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">bKash</p>
+                  <p className="text-xs text-[#6B6B6B]">Pay via bKash mobile wallet</p>
+                </div>
+              </label>
+
+              {/* Nagad */}
+              <label className={cn(
+                'flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all',
+                paymentMethod === 'nagad' ? 'border-[#ED1C24] bg-[#ED1C24]/5 ring-1 ring-[#ED1C24]/20' : 'border-[rgba(0,0,0,0.1)] hover:border-[rgba(0,0,0,0.2)]'
+              )}>
+                <input type="radio" name="payment" value="nagad" checked={paymentMethod === 'nagad'} onChange={() => setPaymentMethod('nagad')} className="text-[#ED1C24] focus:ring-[#ED1C24]" />
+                <div className="w-12 h-8 bg-red-50 rounded-lg flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Nagad</p>
+                  <p className="text-xs text-[#6B6B6B]">Pay via Nagad digital wallet</p>
+                </div>
+              </label>
+
+              {/* Rocket */}
+              <label className={cn(
+                'flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all',
+                paymentMethod === 'rocket' ? 'border-[#68217A] bg-[#68217A]/5 ring-1 ring-[#68217A]/20' : 'border-[rgba(0,0,0,0.1)] hover:border-[rgba(0,0,0,0.2)]'
+              )}>
+                <input type="radio" name="payment" value="rocket" checked={paymentMethod === 'rocket'} onChange={() => setPaymentMethod('rocket')} className="text-[#68217A] focus:ring-[#68217A]" />
+                <div className="w-12 h-8 bg-purple-50 rounded-lg flex items-center justify-center">
+                  <RocketIcon className="w-5 h-5 text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Rocket</p>
+                  <p className="text-xs text-[#6B6B6B]">Pay via Dutch-Bangla Bank Rocket</p>
+                </div>
+              </label>
+
+              {/* Card */}
               <label className={cn(
                 'flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all',
                 paymentMethod === 'card' ? 'border-[#2563EB] bg-[#2563EB]/5 ring-1 ring-[#2563EB]/20' : 'border-[rgba(0,0,0,0.1)] hover:border-[rgba(0,0,0,0.2)]'
               )}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="card"
-                  checked={paymentMethod === 'card'}
-                  onChange={() => setPaymentMethod('card')}
-                  className="text-[#2563EB] focus:ring-[#2563EB]"
-                />
+                <input type="radio" name="payment" value="card" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="text-[#2563EB] focus:ring-[#2563EB]" />
                 <div className="w-12 h-8 bg-white rounded-lg flex items-center justify-center border border-[rgba(0,0,0,0.06)]">
                   <CreditCard className="w-5 h-5 text-[#2563EB]" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Credit / Debit Card</p>
-                  <p className="text-xs text-[#6B6B6B]">Visa, Mastercard, RuPay, UPI, Net Banking</p>
+                  <p className="text-sm font-medium">Card / Online Payment</p>
+                  <p className="text-xs text-[#6B6B6B]">Visa, Mastercard, Amex via Razorpay</p>
                 </div>
               </label>
             </div>
+
+            {(paymentMethod === 'bkash' || paymentMethod === 'nagad' || paymentMethod === 'rocket') && (
+              <div className="mt-4 p-4 bg-[#F8F9FA] rounded-xl">
+                <label className="block text-sm font-medium text-[#1A1A1A] mb-2">
+                  Your {paymentMethod === 'bkash' ? 'bKash' : paymentMethod === 'nagad' ? 'Nagad' : 'Rocket'} Number
+                </label>
+                <input
+                  type="tel"
+                  value={mobileNumber}
+                  onChange={e => setMobileNumber(e.target.value)}
+                  placeholder="01XXXXXXXXX"
+                  className="w-full h-11 px-3 text-sm bg-white border border-[rgba(0,0,0,0.12)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+                <p className="text-xs text-[#6B6B6B] mt-1.5">We will send a payment request to this number</p>
+              </div>
+            )}
           </motion.div>
         </div>
 
@@ -410,7 +489,13 @@ export default function CheckoutPage() {
                   ? 'Placing order...'
                   : paymentMethod === 'cod'
                     ? `Place Order — Pay ${formatCurrency(total)} on Delivery`
-                    : `Place Order — ${formatCurrency(total)}`
+                    : paymentMethod === 'bkash'
+                      ? `Place Order — Pay ${formatCurrency(total)} via bKash`
+                      : paymentMethod === 'nagad'
+                        ? `Place Order — Pay ${formatCurrency(total)} via Nagad`
+                        : paymentMethod === 'rocket'
+                          ? `Place Order — Pay ${formatCurrency(total)} via Rocket`
+                          : `Place Order — ${formatCurrency(total)}`
                 }
               </Button>
             </div>
@@ -427,6 +512,17 @@ function ShoppingBag({ className }: { className?: string }) {
       <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
       <line x1="3" y1="6" x2="21" y2="6" />
       <path d="M16 10a4 4 0 01-8 0" />
+    </svg>
+  )
+}
+
+function RocketIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z" />
+      <path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z" />
+      <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+      <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
     </svg>
   )
 }

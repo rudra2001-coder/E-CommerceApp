@@ -136,7 +136,7 @@ export default function AdminMedia() {
               animate={{ opacity: 1, scale: 1 }}
               className="relative group aspect-square rounded-xl overflow-hidden bg-[#F5F5F0] border border-[rgba(0,0,0,0.06)]"
             >
-              <Image src={getImageUrl(`product-images/${file.name}`)} alt="" fill className="object-cover" />
+              <Image src={file.url} alt="" fill className="object-cover" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                 <button onClick={() => copyUrl(file)} className="p-2 bg-white rounded-lg text-[#1A1A1A] hover:bg-[#F5F5F0]">
                   {copiedId === file.name ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}

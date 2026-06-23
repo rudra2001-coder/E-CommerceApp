@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronRight, Heart, Truck, Shield,
-  RotateCcw, ChevronDown, Check, Star
+  RotateCcw, ChevronDown, Check, Star, Clock, FileText, Package
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn, formatCurrency, getSalePrice, getImageUrl, truncate } from '@/lib/utils'
@@ -48,29 +48,22 @@ export default function ProductDetailPage() {
   const [reviewsPage, setReviewsPage] = useState(1)
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: '', body: '' })
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [imageZoom, setImageZoom] = useState(false)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     async function fetchProduct() {
       setLoading(true)
       try {
-        const { data } = await supabase
-          .from('products')
-          .select('*, category:categories(*), images:product_images(*), variants:product_variants(*)')
-          .eq('slug', slug)
-          .single()
-        if (data) {
-          setProduct(data as unknown as Product)
-          setCurrentImage(0)
-          if (data.category_id) {
-            const { data: related } = await supabase
-              .from('products')
-              .select('*, category:categories(*), images:product_images(*)')
-              .eq('category_id', data.category_id)
-              .neq('id', data.id)
-              .eq('status', 'active')
-              .limit(8)
-            if (related) setRelatedProducts(related as unknown as Product[])
+        const res = await fetch(`/api/products/${slug}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.product) {
+            setProduct(data.product)
+            setCurrentImage(0)
           }
+          if (data.related?.length > 0) setRelatedProducts(data.related)
+          if (data.reviews?.length > 0) setReviews(data.reviews)
         }
       } catch {
         // error
@@ -95,7 +88,7 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1440px] px-6 md:px-16 py-8">
+      <div className="mx-auto max-w-[1440px] px-6 md:px-16 py-8 pb-24 md:pb-8">
         <div className="grid md:grid-cols-2 gap-8 md:gap-16">
           <div className="space-y-4">
             <div className="aspect-square rounded-2xl bg-[#F5F5F0] animate-pulse" />
@@ -132,6 +125,12 @@ export default function ProductDetailPage() {
     const count = reviews.filter(r => r.rating === i + 1).length
     return { stars: i + 1, count, percentage: reviews.length ? (count / reviews.length) * 100 : 0 }
   }).reverse()
+  const badges = product.tags?.filter(t => ['New', 'Sale', 'Best Seller', 'Featured', 'Limited'].includes(t)) || []
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMousePos({ x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 })
+  }
 
   const handleAddToCart = () => {
     if (outOfStock) return
@@ -186,7 +185,8 @@ export default function ProductDetailPage() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1440px] px-6 md:px-16 py-8">
+    <>
+      <div className="mx-auto max-w-[1440px] px-6 md:px-16 py-8 pb-24 md:pb-8">
       <motion.nav initial="hidden" animate="visible" variants={fadeUp} className="flex items-center gap-2 text-sm text-[#6B6B6B] mb-8">
         <Link href="/" className="hover:text-[#1A1A1A] transition-colors">Home</Link>
         <ChevronRight className="w-3.5 h-3.5" />
@@ -205,7 +205,12 @@ export default function ProductDetailPage() {
 
       <div className="grid md:grid-cols-2 gap-8 md:gap-16">
         <motion.div initial="hidden" animate="visible" variants={fadeUp}>
-          <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#F5F5F0] mb-4">
+          <div
+            className="relative aspect-square rounded-2xl overflow-hidden bg-[#F5F5F0] mb-4 group cursor-crosshair"
+            onMouseEnter={() => setImageZoom(true)}
+            onMouseLeave={() => setImageZoom(false)}
+            onMouseMove={handleMouseMove}
+          >
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentImage}
@@ -220,11 +225,28 @@ export default function ProductDetailPage() {
                   alt={images[currentImage]?.alt_text || product.title}
                   fill
                   priority
-                  className="object-cover"
+                  className={cn('object-cover transition-transform duration-200', imageZoom && 'scale-150')}
+                  style={imageZoom ? { transformOrigin: `${mousePos.x}% ${mousePos.y}%` } : undefined}
                   sizes="(max-width: 768px) 100vw, 50vw"
                 />
               </motion.div>
             </AnimatePresence>
+            {badges.length > 0 && (
+              <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
+                {badges.map(badge => (
+                  <span key={badge} className={cn(
+                    'px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full',
+                    badge === 'Sale' && 'bg-[#DC2626] text-white',
+                    badge === 'New' && 'bg-[#2563EB] text-white',
+                    badge === 'Best Seller' && 'bg-[#F59E0B] text-white',
+                    badge === 'Featured' && 'bg-[#16A34A] text-white',
+                    badge === 'Limited' && 'bg-[#7C3AED] text-white',
+                  )}>
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {images.map((img, i) => (
@@ -344,16 +366,19 @@ export default function ProductDetailPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 p-4 bg-[#F5F5F0] rounded-2xl">
+          <div className="grid grid-cols-3 gap-4 p-5 bg-gradient-to-br from-[#F8F9FA] to-[#F0F1F3] rounded-2xl border border-[rgba(0,0,0,0.04)]">
             {[
-              { icon: Truck, label: 'Free Shipping', sub: 'On orders $50+' },
-              { icon: RotateCcw, label: 'Easy Returns', sub: '30-day return' },
-              { icon: Shield, label: 'Secure', sub: 'SSL protected' },
-            ].map(item => (
+              { icon: Truck, label: 'Free Delivery', sub: 'Orders over ৳2000' },
+              { icon: RotateCcw, label: 'Easy Returns', sub: '7-day return policy' },
+              { icon: Shield, label: 'Secure', sub: 'SSL encrypted' },
+              { icon: Clock, label: 'Quick Ship', sub: '1-3 business days' },
+            ].slice(0, product.tags?.includes('Express') ? 4 : 3).map(item => (
               <div key={item.label} className="text-center">
-                <item.icon className="w-4 h-4 mx-auto mb-1 text-[#2563EB]" />
-                <p className="text-[10px] font-semibold">{item.label}</p>
-                <p className="text-[9px] text-[#6B6B6B]">{item.sub}</p>
+                <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center mx-auto mb-2">
+                  <item.icon className="w-4 h-4 text-[#2563EB]" />
+                </div>
+                <p className="text-[11px] font-semibold text-[#1A1A1A]">{item.label}</p>
+                <p className="text-[9px] text-[#6B6B6B] mt-0.5">{item.sub}</p>
               </div>
             ))}
           </div>
@@ -365,12 +390,12 @@ export default function ProductDetailPage() {
         whileInView="visible"
         viewport={{ once: true }}
         variants={fadeUp}
-        className="mt-16 border-t border-[rgba(0,0,0,0.06)] divide-y divide-[rgba(0,0,0,0.06)]"
+        className="mt-16 border-t border-[rgba(0,0,0,0.06)] divide-y divide-[rgba(0,0,0,0.06)] bg-white rounded-2xl border-x border-b shadow-sm"
       >
         {[
-          { key: 'description' as const, title: 'Description', content: product.description || 'No description available.' },
+          { key: 'description' as const, title: 'Description', icon: FileText, content: product.description || 'No description available.' },
           {
-            key: 'specifications' as const, title: 'Specifications',
+            key: 'specifications' as const, title: 'Specifications', icon: FileText,
             content: (
               <table className="w-full text-sm">
                 <tbody>
@@ -385,17 +410,17 @@ export default function ProductDetailPage() {
             ),
           },
           {
-            key: 'shipping' as const, title: 'Shipping and Returns',
+            key: 'shipping' as const, title: 'Shipping and Returns', icon: Package,
             content: (
               <div className="text-sm text-[#6B6B6B] space-y-3">
-                <p><strong className="text-[#1A1A1A]">Shipping:</strong> Free standard shipping on orders over $50. Express shipping available for $12.99. Orders are processed within 1-2 business days.</p>
-                <p><strong className="text-[#1A1A1A]">Returns:</strong> We accept returns within 30 days of delivery. Items must be unworn with tags attached. Refunds are processed within 5-7 business days.</p>
-                <p><strong className="text-[#1A1A1A]">Exchanges:</strong> For size exchanges, please initiate a return and place a new order for the desired size.</p>
+                <p><strong className="text-[#1A1A1A]">Delivery:</strong> Free standard delivery across Bangladesh on orders over ৳2,000. Express delivery available for ৳150 within Dhaka city. Orders are processed within 1-2 business days.</p>
+                <p><strong className="text-[#1A1A1A]">Returns:</strong> We accept returns within 7 days of delivery. Items must be unworn with tags attached. Refunds are processed within 3-5 business days after inspection.</p>
+                <p><strong className="text-[#1A1A1A]">Cash on Delivery:</strong> Pay in cash when your order arrives. Also available: bKash, Nagad, Rocket payment on delivery.</p>
               </div>
             ),
           },
           {
-            key: 'reviews' as const, title: `Reviews (${reviews.length})`,
+            key: 'reviews' as const, title: `Reviews (${reviews.length})`, icon: FileText,
             content: (
               <div>
                 <div className="flex gap-8 mb-8 p-6 bg-[#F5F5F0] rounded-2xl">
@@ -502,7 +527,10 @@ export default function ProductDetailPage() {
               onClick={() => setOpenAccordion(openAccordion === section.key ? null : section.key)}
               className="w-full flex items-center justify-between py-5 text-left"
             >
-              <span className="font-medium">{section.title}</span>
+              <span className="font-medium flex items-center gap-2">
+                <section.icon className="w-4 h-4 text-[#6B6B6B]" />
+                {section.title}
+              </span>
               <ChevronDown className={cn(
                 'w-4 h-4 text-[#6B6B6B] transition-transform duration-200',
                 openAccordion === section.key && 'rotate-180'
@@ -545,6 +573,45 @@ export default function ProductDetailPage() {
           </div>
         </motion.section>
       )}
-    </div>
+      </div>
+
+      <motion.div
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
+        transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+        className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white border-t border-[rgba(0,0,0,0.08)] shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-[#6B6B6B] truncate">{product.title}</p>
+            <p className="text-sm font-bold">
+              {salePrice ? (
+                <>
+                  {formatCurrency(salePrice)}
+                  <span className="ml-1.5 text-xs text-[#6B6B6B] line-through">{formatCurrency(product.price)}</span>
+                </>
+              ) : (
+                formatCurrency(product.price)
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <QuantitySelector value={quantity} min={1} max={product.stock_quantity || 99} onChange={setQuantity} />
+            <button
+              onClick={handleAddToCart}
+              disabled={outOfStock}
+              className={cn(
+                'px-5 h-10 text-sm font-semibold rounded-xl transition-all whitespace-nowrap',
+                outOfStock
+                  ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed'
+                  : 'bg-[#1A1A1A] text-white hover:bg-[#333] active:scale-[0.97]'
+              )}
+            >
+              {outOfStock ? 'Out of Stock' : 'Add to Cart'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </>
   )
 }

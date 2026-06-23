@@ -5,8 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number, currencySymbol = '$'): string {
-  return `${currencySymbol}${amount.toFixed(2)}`
+export function formatCurrency(amount: number, currencySymbol?: string, currencyCode?: string): string {
+  const sym = currencySymbol || '৳'
+  const code = currencyCode || 'BDT'
+  if (code === 'BDT' || code === 'JPY') {
+    return `${sym}${Math.round(amount).toLocaleString('en-BD')}`
+  }
+  return `${sym}${amount.toFixed(2)}`
 }
 
 export function slugify(text: string): string {
@@ -24,7 +29,11 @@ export function truncate(text: string, length: number): string {
 
 export function getImageUrl(path: string | null | undefined): string {
   if (!path) return '/placeholder.svg'
-  if (path.startsWith('http')) return path
+  if (path.startsWith('http')) {
+    const match = path.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+    if (match) return `https://drive.google.com/uc?export=view&id=${match[1]}`
+    return path
+  }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   return `${supabaseUrl}/storage/v1/object/public/${path}`
 }

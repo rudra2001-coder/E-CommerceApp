@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Package, Truck, CheckCircle, XCircle, Clock, Printer, MapPin } from 'lucide-react'
+import { ArrowLeft, Package, Truck, CheckCircle, XCircle, Clock, Printer, MapPin, DollarSign } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { adminApi } from '@/lib/admin-fetch'
 import { cn, formatCurrency, getImageUrl } from '@/lib/utils'
@@ -81,6 +81,20 @@ export default function AdminOrderDetail() {
         note: null,
       })
       toast(('Status updated to ' + newStatus), 'success')
+      loadOrder()
+    } catch (err: any) {
+      toast(err.message || 'Update failed', 'error')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  async function markAsPaid() {
+    if (!order) return
+    setUpdating(true)
+    try {
+      await adminApi.update('orders', { payment_status: 'paid' }, [{ method: 'eq', column: 'id', value: order.id }])
+      toast('Payment marked as paid', 'success')
       loadOrder()
     } catch (err: any) {
       toast(err.message || 'Update failed', 'error')
@@ -274,6 +288,12 @@ export default function AdminOrderDetail() {
             <h2 className="text-base font-semibold text-[#1A1A1A]">Payment</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
+                <span className="text-[#6B6B6B]">Method</span>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize bg-gray-100 text-gray-700">
+                  {order.payment_method || 'cod'}
+                </span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-[#6B6B6B]">Status</span>
                 <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', order.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>
                   {order.payment_status}
@@ -292,6 +312,11 @@ export default function AdminOrderDetail() {
                 </div>
               )}
             </div>
+            {order.payment_status === 'pending' && ['cod', 'bkash', 'nagad', 'rocket'].includes(order.payment_method) && (
+              <Button variant="secondary" size="sm" className="w-full" onClick={markAsPaid} loading={updating}>
+                <DollarSign className="w-4 h-4 mr-2" /> Mark as Paid
+              </Button>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl p-5 border border-[rgba(0,0,0,0.06)] space-y-4">

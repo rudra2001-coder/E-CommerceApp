@@ -1,6 +1,6 @@
-# STORE — Premium Full-Stack E-Commerce Platform
+# STORE — Premium Full-Stack E-Commerce Platform (Bangladesh)
 
-A production-grade e-commerce platform built with Next.js 16, TypeScript, Tailwind CSS, Framer Motion, Supabase, and Razorpay.
+A production-grade e-commerce platform built with Next.js 16, TypeScript, Tailwind CSS, Framer Motion, Supabase, and Razorpay. Defaults to Bangladesh (BDT, divisions/districts/upazilas, bKash/Nagad/Rocket/COD, 5% VAT, +880 phone).
 
 ## Tech Stack
 
@@ -9,7 +9,7 @@ A production-grade e-commerce platform built with Next.js 16, TypeScript, Tailwi
 - **Styling**: Tailwind CSS v4
 - **Animations**: Framer Motion
 - **Backend/Database**: Supabase (Auth, PostgreSQL, Storage)
-- **Payments**: Razorpay
+- **Payments**: Razorpay (card) + bKash/Nagad/Rocket (manual) + COD
 - **Charts**: Recharts
 - **Editor**: TipTap (rich text)
 - **Icons**: Lucide React
@@ -21,22 +21,24 @@ A production-grade e-commerce platform built with Next.js 16, TypeScript, Tailwi
 - Animated page transitions, scroll-triggered reveals, micro-interactions
 - Hero carousel with auto-rotation
 - Product catalog with categories, filters, sorting, search, quick view modal, grid/list toggle
-- Product detail pages with image galleries, variant selectors, reviews
+- Product detail pages with image galleries, image zoom on hover, color/size selectors, badge display, BD trust badges, reviews
+- **Sticky mobile add-to-cart bar** with quantity selector
 - Cart drawer with animations, coupon support
-- Multi-step checkout with Razorpay payment integration
+- Multi-step checkout with COD, bKash/Nagad/Rocket/Card payment methods, Bangladesh address fields
 - User accounts: auth, orders, addresses, wishlist, settings
 - Newsletter signup, contact form, FAQ, policy pages (content managed via CMS)
 
 ### Admin Panel
 - Dashboard with KPI cards, revenue charts, order/stock alerts
-- Product management with rich editor (TipTap), media upload, variants
+- Product management with rich editor (TipTap), media upload, variants, **badge selector** (New/Sale/Best Seller/Featured/Limited)
+- **Automatic slug deduplication** when saving products
 - Category management with nested tree view
 - Pages CMS — edit About, Contact, FAQ, policies with TipTap rich text editor
 - Homepage sections management — toggle visibility of hero, categories, arrivals, etc.
 - Order management with timeline, status updates, tracking
 - Customer management with order history
 - Coupon/discount management
-- Site settings (brand, social, shipping, tax, hero slides)
+- Site settings (brand, social, shipping, tax, hero slides, **Bangladesh defaults**)
 - SEO management (meta, GA, GSC, sitemap)
 - Media library
 - Analytics dashboard
@@ -72,7 +74,7 @@ RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 
 3. **Database setup**
 
-Run the migration file `sql/migration.sql` in your Supabase SQL editor to create all tables, indexes, RLS policies, and triggers.
+Run the migration file `sql/migration.sql` in your Supabase SQL editor to create all tables, indexes, RLS policies, and triggers. Then run `sql/customization_migration.sql` for new CMS tables and `sql/fix_storage_policies.sql` for storage policies.
 
 4. **Create admin user**
 
@@ -103,7 +105,7 @@ src/
 ├── app/
 │   ├── (storefront)/    # Public pages (layout, home, products, cart, checkout, account...)
 │   ├── (admin)/         # Admin panel (layout, dashboard, products, orders...)
-│   └── api/             # API routes (razorpay, orders, products...)
+│   └── api/             # API routes (products, orders, homepage, settings, categories...)
 ├── components/
 │   ├── ui/              # Design system (Button, Input, Modal, Toast, Skeleton)
 │   ├── storefront/      # Header, Footer, ProductCard, CartDrawer, etc.

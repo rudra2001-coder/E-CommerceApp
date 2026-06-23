@@ -32,13 +32,12 @@ export default function WishlistPage() {
           .eq('user_id', userId)
 
         if (wishlist && wishlist.length > 0) {
-          const ids = wishlist.map(w => w.product_id)
-          const { data } = await supabase
-            .from('products')
-            .select('*, category:categories(*)')
-            .in('id', ids)
-            .eq('status', 'active')
-          if (data) setProducts(data as unknown as Product[])
+          const ids = wishlist.map(w => w.product_id).join(',')
+          const res = await fetch(`/api/products?ids=${ids}&limit=50`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data.products) setProducts(data.products)
+          }
         }
       } catch {
         // error

@@ -150,6 +150,7 @@ export interface Order {
   total: number;
   coupon_code: string | null;
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
+  payment_method: 'cod' | 'card' | 'bkash' | 'nagad' | 'rocket';
   fulfillment_status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   razorpay_payment_id: string | null;
   tracking_number: string | null;
@@ -190,8 +191,10 @@ export interface Review {
   title: string | null;
   body: string | null;
   is_verified: boolean;
+  is_approved: boolean;
   created_at: string;
   profile?: Pick<Profile, 'full_name' | 'avatar_url'>;
+  product?: Pick<Product, 'title' | 'slug' | 'images'>;
 }
 
 export interface Coupon {
@@ -220,6 +223,58 @@ export interface HeroSlide {
   cta_link: string | null;
   sort_order: number;
   is_active: boolean;
+  animation_type: 'fade' | 'slide' | 'zoom';
+  text_color: string;
+  overlay_opacity: number;
+}
+
+export interface Testimonial {
+  id: string;
+  name: string;
+  role: string | null;
+  text: string;
+  rating: number;
+  avatar_url: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Feature {
+  id: string;
+  title: string;
+  description: string | null;
+  icon_name: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface Banner {
+  id: string;
+  image_url: string | null;
+  title: string | null;
+  subtitle: string | null;
+  cta_text: string | null;
+  cta_link: string | null;
+  is_active: boolean;
+  sort_order: number;
+  valid_from: string | null;
+  valid_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FaqItem {
+  id: string;
+  category: string;
+  question: string;
+  answer: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Page {

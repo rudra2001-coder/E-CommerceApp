@@ -8,7 +8,14 @@
 | **Language** | TypeScript |
 | **Database** | Supabase (PostgreSQL) with Row-Level Security |
 | **Auth** | Supabase Auth (admin) + Light Sign-In via localStorage (customers) |
-| **Payments** | Razorpay (INR, amounts in paise) |
+| **Payments** | Razorpay (INR, amounts in paise) + bKash / Nagad / Rocket (manual on-delivery) + COD |
+| **Styling** | Tailwind CSS v4 |
+| **Animations** | Framer Motion |
+| **Charts** | Recharts |
+| **Editor** | Tiptap (admin CMS pages) |
+| **Fonts** | Inter (sans) + Playfair Display (serif) |
+| **Currency** | BDT (৳) — configurable via admin settings |
+| **Country** | Bangladesh (Divisions/Districts/Upazilas, +880 phone, 5% VAT default)
 | **Styling** | Tailwind CSS v4 |
 | **Animations** | Framer Motion |
 | **Charts** | Recharts |
@@ -246,7 +253,7 @@ src/
 
 ### Cash on Delivery (COD)
 
-1. User fills checkout form (name, email, phone, address)
+1. User fills checkout form (name, email, phone with +880 BD format `01[3-9]XXXXXXXXX`)
 2. User selects **Cash on Delivery** as payment method
 3. User clicks **Place Order**
 4. If not signed in: account auto-created via `POST /api/auth/light-signin`, toast "Account created!"
@@ -255,6 +262,14 @@ src/
 7. Cart cleared, success toast "Order placed! Pay on delivery."
 8. Redirect to `/order-confirmation/[id]`
 9. Order appears in **Admin > Orders** with `payment_status: pending`
+
+### bKash / Nagad / Rocket (Manual on-Delivery)
+
+1-4. Same as COD
+5. User selects bKash/Nagad/Rocket and provides mobile number
+6. Order created via `POST /api/orders` with `payment_method` set to the selected provider
+7. Agent calls customer on delivery to complete mobile payment
+8. Admin marks as paid after confirmation
 
 ### Card Payment (Razorpay)
 
@@ -281,19 +296,29 @@ The database trigger `generate_order_number_trigger` can also auto-generate on d
 ## API Routes
 
 | Route | Method | Purpose | Auth |
-|---|---|---|---|
-| `/api/orders` | `POST` | Create order with items | Service role (server-side) |
-| `/api/orders` | `PATCH` | Update payment status | Service role |
-| `/api/orders` | `DELETE` | Delete order (cascades items + timeline) | Service role |
-| `/api/orders/[id]` | `GET` | Fetch order with items + timeline | Service role |
-| `/api/orders/[id]` | `PATCH` | Update fulfillment status + notes | Service role |
-| `/api/products` | `GET` | Public product listing (filters, sort, pagination) | Anon |
-| `/api/create-payment-intent` | `POST` | Create Razorpay payment order | Service role |
+|---|---|---|---|---|
+| `/api/orders` | `POST` | Create order with items | supabaseAdmin (server-side) |
+| `/api/orders` | `PATCH` | Update payment status | supabaseAdmin |
+| `/api/orders` | `DELETE` | Delete order (cascades items + timeline) | supabaseAdmin |
+| `/api/orders/[id]` | `GET` | Fetch order with items + timeline | supabaseAdmin |
+| `/api/orders/[id]` | `PATCH` | Update fulfillment status + notes | supabaseAdmin |
+| `/api/products` | `GET` | Public product listing (filters: category_slug, categories[], search, ids[]; sort; pagination). **Cache: s-maxage=60, stale-while-revalidate=300** | supabaseAdmin |
+| `/api/products/[slug]` | `GET` | Product detail + related products (same category) + approved reviews. **Cache: s-maxage=60, stale-while-revalidate=300** | supabaseAdmin |
+| `/api/categories` | `GET` | Root categories with sort order. **Cache: s-maxage=300, stale-while-revalidate=600** | supabaseAdmin |
+| `/api/homepage` | `GET` | All homepage data: settings, hero slides, sections, testimonials, features, banners, categories, newArrivals, bestSellers. **Cache: s-maxage=120, stale-while-revalidate=600** | supabaseAdmin |
+| `/api/settings` | `GET` | Public site settings. **Cache: s-maxage=300, stale-while-revalidate=600** | supabaseAdmin |
+| `/api/features` | `GET` | Homepage feature highlights | supabaseAdmin |
+| `/api/banners` | `GET` | Promotional banners | supabaseAdmin |
+| `/api/faq` | `GET` | FAQ items | supabaseAdmin |
+| `/api/testimonials` | `GET` | Customer testimonials | supabaseAdmin |
+| `/api/pages/[slug]` | `GET` | CMS page content | supabaseAdmin |
+| `/api/create-payment-intent` | `POST` | Create Razorpay payment order | supabaseAdmin |
 | `/api/webhooks/razorpay` | `POST` | Handle Razorpay payment events | Webhook secret |
 | `/api/auth/login` | `POST` | Admin login with role check | Anon |
-| `/api/auth/light-signin` | `POST` | Create/update light customer | Service role |
-| `/api/settings` | `GET` | Public site settings | Anon |
-| `/api/admin/query` | `POST` | Generic admin CRUD (select/insert/update/delete/count) | RLS |
+| `/api/auth/light-signin` | `POST` | Create/update light customer | supabaseAdmin |
+| `/api/contact` | `POST` | Contact form submission | supabaseAdmin |
+| `/api/newsletter` | `POST` | Newsletter signup | supabaseAdmin |
+| `/api/admin/query` | `POST` | Generic admin CRUD (select/insert/update/delete/count) | RLS (is_admin) |
 
 ### POST /api/orders — Request Body
 
@@ -311,16 +336,21 @@ The database trigger `generate_order_number_trigger` can also auto-generate on d
   "shipping_address": {
     "full_name": "John Doe",
     "email": "john@example.com",
-    "phone": "1234567890",
-    "address_line1": "123 Main St",
-    "city": "New York",
-    "state": "NY",
-    "zip": "10001",
-    "country": "US"
+    "phone": "01712345678",
+    "address_line1": "123 Gulshan Avenue",
+    "address_line2": "Apt 5B",
+    "city": "Dhaka",
+    "state": "Dhaka",
+    "zip": "1212",
+    "country": "Bangladesh",
+    "district": "Dhaka",
+    "upazila": "Gulshan"
   },
   "billing_address": { ... },
   "shipping_method": "Standard Shipping",
   "shipping_cost": 0,
+  "payment_method": "cod | bkash | nagad | rocket | card",
+  "payment_mobile": "01712345678",
   "coupon_code": "SAVE10" | null
 }
 ```
@@ -358,20 +388,20 @@ The database trigger `generate_order_number_trigger` can also auto-generate on d
 ## Storefront Pages
 
 | Route | Features |
-|---|---|
-| `/` | Hero slider, featured products, categories grid, newsletter signup, features/testimonials |
-| `/products` | Filter sidebar (categories, price range), sort, grid/list toggle, pagination, quick-add |
-| `/products/[slug]` | Image gallery, sale badge, variant selector, quantity selector, description/details/shipping tabs, reviews, wishlist toggle |
+|---|---|---|
+| `/` | Hero slider, featured products, categories grid, newsletter signup, features/testimonials — all fetched via `/api/homepage` |
+| `/products` | Filter sidebar (categories, price range), sort, grid/list toggle, pagination, quick-add — fetched via `/api/products` + `/api/categories` |
+| `/products/[slug]` | Image gallery with pan-to-zoom, badge display (New/Sale/Best Seller/Featured/Limited), color/size selectors, quantity selector, accordion (description/specs/shipping/reviews), BD trust badges, **sticky mobile add-to-cart bar**, related products, review submit — fetched via `/api/products/[slug]` |
 | `/cart` | Item list with quantity steppers, remove, subtotal, checkout CTA |
-| `/checkout` | Single-page: Contact info, Shipping Address, Payment Method (COD/card), Order Summary, Place Order |
-| `/search` | Search input with filters and results grid |
+| `/checkout` | Single-page: Contact info, Shipping Address (Bangladesh: Division/District/Upazila dropdowns), Payment Method (COD/bKash/Nagad/Rocket/Card), Order Summary, Place Order — VAT 5%, BDT currency |
+| `/search` | Search input with filters and results grid — fetched via `/api/products?search=...` |
 | `/order-confirmation/[id]` | Success checkmark, order number, items summary, totals, address |
 | `/account` | Dashboard with recent orders and profile summary |
 | `/account/orders` | Order history list with status badges |
 | `/account/orders/[id]` | Order detail with items, timeline, shipping info |
 | `/account/addresses` | Saved addresses with add/edit |
 | `/account/settings` | Profile edit form |
-| `/account/wishlist` | Wishlist items with add-to-cart |
+| `/account/wishlist` | Wishlist items — fetched via `/api/products?ids=...` |
 | `/about`, `/contact`, `/faq`, etc. | CMS-managed content pages |
 
 ---
@@ -540,5 +570,27 @@ The `adminApi` helper in `src/lib/admin-fetch.ts` provides typed methods:
 3. **Client-Side Cart**: Cart lives in `localStorage` via `CartContext` — no server-side persistence for anonymous carts
 4. **Server-Side Order Creation**: `POST /api/orders` uses the service role key for full access to validate products, check stock, apply coupons, and compute totals server-side
 5. **Auto Account Creation**: During checkout, an account is automatically created from the user's email — no separate sign-up step
-6. **COD vs Card**: COD bypasses Razorpay entirely; Card goes through full payment flow with webhook callback
-7. **Order Deletion**: `DELETE /api/orders` cascades to `order_items` and `order_timeline` via DB foreign key constraints
+ 6. **COD vs Card**: COD bypasses Razorpay entirely; Card goes through full payment flow with webhook callback
+ 7. **Order Deletion**: `DELETE /api/orders` cascades to `order_items` and `order_timeline` via DB foreign key constraints
+ 8. **supabaseAdmin() for Public Routes**: All storefront API routes (`/api/products`, `/api/homepage`, `/api/settings`, `/api/categories`, `/api/banners`, `/api/features`, `/api/faq`, `/api/testimonials`, `/api/pages/[slug]`) use `supabaseAdmin()` (service role key) instead of the anon client to avoid 500 errors from missing RLS policies. API queries include explicit `is_active: true` / `status: 'active'` filters so the elevated key returns the same data as a restricted user would see.
+ 9. **Slug Deduplication**: `ProductForm.tsx` queries existing product slugs before insert and auto-appends `-1`, `-2`, etc. (up to 20 attempts) to prevent duplicate slug errors.
+10. **Badge Selector**: ProductForm includes one-click badge toggles (New/Sale/Best Seller/Featured/Limited) stored in the `tags` array. Displayed as color-coded badges on product detail cards.
+11. **Image Zoom**: Product detail page implements CSS transform pan-to-zoom on hover (scale-150 with dynamic `transformOrigin` based on mouse position) for high-resolution image inspection.
+12. **Sticky Mobile Add-to-Cart Bar**: Product detail page shows a fixed-bottom bar on mobile (`md:hidden`) with product title, price, quantity selector, and Add to Cart button — spring-animated on mount, hidden on desktop.
+13. **Caching Headers**: All public API routes set `Cache-Control` headers:
+    - `s-maxage=60, stale-while-revalidate=300` (products — 1 min fresh, 5 min stale)
+    - `s-maxage=120, stale-while-revalidate=600` (homepage — 2 min fresh, 10 min stale)
+    - `s-maxage=300, stale-while-revalidate=600` (settings/categories — 5 min fresh, 10 min stale)
+14. **Google Drive Image URLs**: `getImageUrl()` in `src/lib/utils.ts` auto-converts Google Drive sharing links (`/file/d/ID`) to direct image URLs. `next.config.ts` includes `drive.google.com`, `lh3.googleusercontent.com`, `lh5.googleusercontent.com` in remotePatterns.
+15. **Bangladesh Checkout Defaults**: Country defaults to "Bangladesh", Division dropdown (8 BD divisions), District/Upazila text fields, phone validation `01[3-9]XXXXXXXXX`, payment methods include bKash/Nagad/Rocket with branded radio UI and mobile number input, VAT default 5%, currency BDT ৳.
+16. **Storage Bucket Separation**: `product-images` bucket for product gallery images, `image` bucket for admin/dashboard/homepage media (hero slides, logos, CMS images), `brand-assets` for branding assets.
+
+## Checklist (Pre-Launch)
+
+1. Run migration SQL files on live database:
+   - `sql/customization_migration.sql` — new tables (testimonials, features, banners, faq_items)
+   - `sql/fix_storage_policies.sql` — storage bucket public read policies
+2. Verify all 58 routes respond correctly on production
+3. Test complete COD/bKash/Nagad/Rocket order flow end-to-end
+4. Test product image upload and display through admin portal
+5. Test slug deduplication with duplicate title products

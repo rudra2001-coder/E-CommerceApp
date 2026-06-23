@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Search, X } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
 import { ProductCard } from '@/components/storefront/ProductCard'
 import { ProductCardSkeleton } from '@/components/ui/skeleton'
@@ -32,22 +31,13 @@ export default function SearchPage() {
     async function search() {
       setLoading(true)
       try {
-        const { data } = await supabase
-          .from('products')
-          .select('*, category:categories(*)')
-          .eq('status', 'active')
-          .textSearch('title', debouncedQuery, { config: 'english' })
-          .limit(20)
-        if (data) setResults(data as unknown as Product[])
+        const res = await fetch(`/api/products?search=${encodeURIComponent(debouncedQuery)}&limit=20&sort=newest`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.products) setResults(data.products)
+        }
       } catch {
-        // fallback to ilike
-        const { data } = await supabase
-          .from('products')
-          .select('*, category:categories(*)')
-          .eq('status', 'active')
-          .ilike('title', `%${debouncedQuery}%`)
-          .limit(20)
-        if (data) setResults(data as unknown as Product[])
+        // no results
       } finally {
         setLoading(false)
       }

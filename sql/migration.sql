@@ -61,8 +61,8 @@ CREATE TABLE IF NOT EXISTS site_settings (
   contact_email TEXT,
   contact_phone TEXT,
   business_address TEXT,
-  currency_code TEXT DEFAULT 'USD',
-  currency_symbol TEXT DEFAULT '$',
+  currency_code TEXT DEFAULT 'BDT',
+  currency_symbol TEXT DEFAULT '৳',
   tax_rate NUMERIC DEFAULT 0,
   tax_inclusive BOOLEAN DEFAULT false,
   announcement_bar_active BOOLEAN DEFAULT false,
@@ -611,4 +611,7 @@ CREATE POLICY "Public shipping read" ON shipping_methods FOR SELECT USING (true)
 DROP POLICY IF EXISTS "Admin all shipping" ON shipping_methods;
 CREATE POLICY "Admin all shipping" ON shipping_methods FOR ALL USING (is_admin());
 
--- Insert default site settings
+-- Insert default site settings (Bangladesh-centric)
+INSERT INTO site_settings (site_name, tagline, currency_code, currency_symbol, tax_rate, contact_email, contact_phone, business_address)
+VALUES ('STORE', 'Premium Fashion in Bangladesh', 'BDT', '৳', 5, 'hello@store.com.bd', '+8801700000000', 'House 12, Road 5, Gulshan, Dhaka 1212')
+ON CONFLICT DO NOTHING;

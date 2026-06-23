@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(
   _request: NextRequest,
@@ -7,11 +7,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await params
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-    const supabase = createClient(url, key, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
+    const supabase = supabaseAdmin()
 
     const { data, error } = await supabase
       .from('pages')

@@ -167,9 +167,9 @@ export default function AdminProductForm({ productId }: Props) {
   const uploadImage = async (file: File): Promise<string> => {
     const ext = file.name.split('.').pop()
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
-    const { data, error } = await supabase.storage.from('product-images').upload(fileName, file)
-    if (error) throw error
-    return `product-images/${fileName}`
+      const { data, error } = await supabase.storage.from('product-images').upload(fileName, file)
+      if (error) throw error
+      return `product-images/${fileName}`
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -265,6 +265,10 @@ export default function AdminProductForm({ productId }: Props) {
     updateField('tags', form.tags.filter(t => t !== tag))
   }
 
+  const addTag = (tag: string) => {
+    if (!form.tags.includes(tag)) updateField('tags', [...form.tags, tag])
+  }
+
   const handleSubmit = async (status: 'draft' | 'active') => {
     updateField('status', status)
     setForm(prev => ({ ...prev, status }))
@@ -274,9 +278,24 @@ export default function AdminProductForm({ productId }: Props) {
     }
     setSaving(true)
     try {
+      let slug = form.slug.trim()
+      if (!productId) {
+        let attempts = 0
+        while (attempts < 20) {
+          const { data: dupes } = await supabase
+            .from('products')
+            .select('slug')
+            .eq('slug', slug)
+          if (!dupes || dupes.length === 0) break
+          attempts++
+          slug = `${form.slug.trim()}-${attempts}`
+        }
+        setForm(prev => ({ ...prev, slug }))
+      }
+
       const productData = {
         title: form.title.trim(),
-        slug: form.slug.trim(),
+        slug,
         description: form.description || null,
         category_id: form.category_id || null,
         tags: form.tags,
@@ -451,16 +470,44 @@ export default function AdminProductForm({ productId }: Props) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Tags</label>
+              <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Badges</label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {[
+                  { label: 'New', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+                  { label: 'Sale', color: 'bg-red-100 text-red-700 border-red-200' },
+                  { label: 'Best Seller', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+                  { label: 'Featured', color: 'bg-green-100 text-green-700 border-green-200' },
+                  { label: 'Limited', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+                ].map(badge => {
+                  const active = form.tags.includes(badge.label)
+                  return (
+                    <button
+                      key={badge.label}
+                      type="button"
+                      onClick={() => {
+                        if (active) removeTag(badge.label)
+                        else addTag(badge.label)
+                      }}
+                      className={cn(
+                        'px-3 py-1 text-xs font-medium rounded-full border transition-all',
+                        active ? `${badge.color} border-current` : 'bg-white text-[#6B6B6B] border-[rgba(0,0,0,0.12)] hover:border-[rgba(0,0,0,0.25)]'
+                      )}
+                    >
+                      {badge.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Custom Tags</label>
               <div className="flex flex-wrap gap-2 mb-2">
-                {form.tags.map(tag => (
+                {form.tags.filter(t => !['New', 'Sale', 'Best Seller', 'Featured', 'Limited'].includes(t)).map(tag => (
                   <span key={tag} className="flex items-center gap-1 px-2 py-1 text-xs bg-[#F5F5F0] rounded-lg">
                     {tag}
                     <button onClick={() => removeTag(tag)}><X className="w-3 h-3" /></button>
                   </span>
                 ))}
               </div>
-              <Input placeholder="Type tag and press Enter" onKeyDown={handleTagKeyDown} />
+              <Input placeholder="Type custom tag and press Enter" onKeyDown={handleTagKeyDown} />
             </div>
           </div>
 

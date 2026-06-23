@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
-import type { SiteSettings, HeroSlide, HomepageSection } from '@/types'
+import type { SiteSettings, HeroSlide, HomepageSection, Banner } from '@/types'
 
 interface ShippingMethod {
   id?: string
@@ -20,16 +20,6 @@ interface ShippingMethod {
   price: string
   delivery_time: string
   free_shipping_threshold: string
-}
-
-interface Banner {
-  id?: string
-  image_url: string
-  text: string
-  link: string
-  is_active: boolean
-  valid_from: string
-  valid_to: string
 }
 
 const defaultSettings: SiteSettings = {
@@ -42,8 +32,8 @@ const defaultSettings: SiteSettings = {
   contact_email: '',
   contact_phone: '',
   business_address: '',
-  currency_code: 'USD',
-  currency_symbol: '$',
+  currency_code: 'BDT',
+  currency_symbol: '৳',
   tax_rate: 0,
   tax_inclusive: false,
   announcement_bar_active: false,
@@ -74,8 +64,10 @@ export default function AdminSettings() {
   const [editingSlide, setEditingSlide] = useState<HeroSlide | null>(null)
   const [bannerModal, setBannerModal] = useState(false)
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null)
-  const [slideForm, setSlideForm] = useState({ heading: '', subheading: '', cta_text: '', cta_link: '', image_url: '', is_active: true })
-  const [bannerForm, setBannerForm] = useState<Banner>({ image_url: '', text: '', link: '', is_active: true, valid_from: '', valid_to: '' })
+  const [slideForm, setSlideForm] = useState({ heading: '', subheading: '', cta_text: '', cta_link: '', image_url: '', is_active: true, animation_type: 'fade' as 'fade' | 'slide' | 'zoom', text_color: '#FFFFFF', overlay_opacity: 40 })
+  const [bannerForm, setBannerForm] = useState({ image_url: '', title: '', subtitle: '', cta_text: '', cta_link: '', is_active: true, valid_from: '', valid_to: '' })
+  const [uploadingSlideImage, setUploadingSlideImage] = useState(false)
+  const slideImageInputRef = useRef<HTMLInputElement>(null)
   const [deleteSlideTarget, setDeleteSlideTarget] = useState<HeroSlide | null>(null)
   const [deleteBannerTarget, setDeleteBannerTarget] = useState<Banner | null>(null)
   const [sections, setSections] = useState<HomepageSection[]>([])
@@ -94,6 +86,8 @@ export default function AdminSettings() {
       })))
       const slides = await adminApi.select('hero_slides', [], { order: { column: 'sort_order', ascending: true } })
       setHeroSlides((slides || []) as HeroSlide[])
+      const bannerData = await adminApi.select('banners', [], { order: { column: 'sort_order', ascending: true } })
+      setBanners((bannerData || []) as Banner[])
       const res = await fetch('/api/admin/homepage-sections')
       if (res.ok) {
         const data = await res.json()
@@ -121,7 +115,7 @@ export default function AdminSettings() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await adminApi.update('site_settings', {
+      const payload = {
         site_name: settings.site_name,
         tagline: settings.tagline,
         contact_email: settings.contact_email,
@@ -140,7 +134,13 @@ export default function AdminSettings() {
         social_twitter: settings.social_twitter,
         social_tiktok: settings.social_tiktok,
         social_youtube: settings.social_youtube,
-      }, [{ method: 'eq', column: 'id', value: settings.id }])
+      }
+      if (settings.id) {
+        await adminApi.update('site_settings', payload, [{ method: 'eq', column: 'id', value: settings.id }])
+      } else {
+        const inserted = await adminApi.insert('site_settings', payload, { single: true })
+        if (inserted) setSettings(prev => ({ ...prev, id: (inserted as any).id }))
+      }
       toast('Settings saved', 'success')
     } catch (err: any) {
       toast(err.message || 'Save failed', 'error')
@@ -194,17 +194,43 @@ export default function AdminSettings() {
   const openSlideModal = (slide?: HeroSlide) => {
     if (slide) {
       setEditingSlide(slide)
-      setSlideForm({ heading: slide.heading, subheading: slide.subheading || '', cta_text: slide.cta_text || '', cta_link: slide.cta_link || '', image_url: slide.image_url, is_active: slide.is_active })
+      setSlideForm({ heading: slide.heading, subheading: slide.subheading || '', cta_text: slide.cta_text || '', cta_link: slide.cta_link || '', image_url: slide.image_url, is_active: slide.is_active, animation_type: slide.animation_type || 'fade', text_color: slide.text_color || '#FFFFFF', overlay_opacity: Math.round((slide.overlay_opacity || 0.4) * 100) })
     } else {
       setEditingSlide(null)
-      setSlideForm({ heading: '', subheading: '', cta_text: '', cta_link: '', image_url: '', is_active: true })
+      setSlideForm({ heading: '', subheading: '', cta_text: '', cta_link: '', image_url: '', is_active: true, animation_type: 'fade', text_color: '#FFFFFF', overlay_opacity: 40 })
     }
     setSlideModal(true)
   }
 
+  const uploadSlideImage = async (file: File) => {
+    setUploadingSlideImage(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const fileName = `hero-${Date.now()}.${ext}`
+      const { error } = await supabase.storage.from('brand-assets').upload(fileName, file)
+      if (error) throw error
+      const path = `brand-assets/${fileName}`
+      setSlideForm(prev => ({ ...prev, image_url: path }))
+      toast('Image uploaded', 'success')
+    } catch (err: any) {
+      toast(err.message || 'Upload failed', 'error')
+    } finally { setUploadingSlideImage(false) }
+  }
+
   const saveSlide = async () => {
     try {
-      const data = { heading: slideForm.heading, subheading: slideForm.subheading || null, cta_text: slideForm.cta_text || null, cta_link: slideForm.cta_link || null, image_url: slideForm.image_url, is_active: slideForm.is_active, sort_order: editingSlide?.sort_order || heroSlides.length }
+      const data = {
+        heading: slideForm.heading,
+        subheading: slideForm.subheading || null,
+        cta_text: slideForm.cta_text || null,
+        cta_link: slideForm.cta_link || null,
+        image_url: slideForm.image_url,
+        is_active: slideForm.is_active,
+        animation_type: slideForm.animation_type,
+        text_color: slideForm.text_color,
+        overlay_opacity: slideForm.overlay_opacity / 100,
+        sort_order: editingSlide?.sort_order || heroSlides.length,
+      }
       if (editingSlide) {
         await adminApi.update('hero_slides', data, [{ method: 'eq', column: 'id', value: editingSlide.id }])
       } else {
@@ -257,6 +283,60 @@ export default function AdminSettings() {
     </div>
   )
 
+  const openBannerModal = (banner?: Banner) => {
+    if (banner) {
+      setEditingBanner(banner)
+      setBannerForm({ image_url: banner.image_url || '', title: banner.title || '', subtitle: banner.subtitle || '', cta_text: banner.cta_text || '', cta_link: banner.cta_link || '', is_active: banner.is_active, valid_from: banner.valid_from ? banner.valid_from.split('T')[0] : '', valid_to: banner.valid_to ? banner.valid_to.split('T')[0] : '' })
+    } else {
+      setEditingBanner(null)
+      setBannerForm({ image_url: '', title: '', subtitle: '', cta_text: '', cta_link: '', is_active: true, valid_from: '', valid_to: '' })
+    }
+    setBannerModal(true)
+  }
+
+  const saveBanner = async () => {
+    try {
+      const data = {
+        image_url: bannerForm.image_url || null,
+        title: bannerForm.title || null,
+        subtitle: bannerForm.subtitle || null,
+        cta_text: bannerForm.cta_text || null,
+        cta_link: bannerForm.cta_link || null,
+        is_active: bannerForm.is_active,
+        valid_from: bannerForm.valid_from || null,
+        valid_to: bannerForm.valid_to || null,
+        sort_order: editingBanner?.sort_order || banners.length,
+      }
+      if (editingBanner) {
+        await adminApi.update('banners', data, [{ method: 'eq', column: 'id', value: editingBanner.id }])
+      } else {
+        await adminApi.insert('banners', data)
+      }
+      toast('Banner saved', 'success')
+      setBannerModal(false)
+      const data2 = await adminApi.select('banners', [], { order: { column: 'sort_order', ascending: true } })
+      setBanners((data2 || []) as Banner[])
+    } catch { toast('Save failed', 'error') }
+  }
+
+  const deleteBanner = async () => {
+    if (!deleteBannerTarget) return
+    try {
+      await adminApi.delete('banners', [{ method: 'eq', column: 'id', value: deleteBannerTarget.id }])
+      toast('Banner deleted', 'success')
+      setDeleteBannerTarget(null)
+      const data = await adminApi.select('banners', [], { order: { column: 'sort_order', ascending: true } })
+      setBanners((data || []) as Banner[])
+    } catch { toast('Delete failed', 'error') }
+  }
+
+  const loadBanners = async () => {
+    try {
+      const data = await adminApi.select('banners', [], { order: { column: 'sort_order', ascending: true } })
+      setBanners((data || []) as Banner[])
+    } catch {}
+  }
+
   const tabs = [
     { id: 'brand', label: 'Brand' },
     { id: 'contact', label: 'Contact & Social' },
@@ -264,6 +344,7 @@ export default function AdminSettings() {
     { id: 'currency', label: 'Currency & Tax' },
     { id: 'shipping', label: 'Shipping' },
     { id: 'hero', label: 'Hero Slides' },
+    { id: 'banners', label: 'Banners' },
     { id: 'homepage', label: 'Homepage' },
   ]
 
@@ -413,6 +494,44 @@ export default function AdminSettings() {
           </div>
         )}
 
+        {activeTab === 'banners' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[#1A1A1A]">Promotional Banners</h2>
+              <Button variant="outline" size="sm" onClick={() => openBannerModal()}><Plus className="w-4 h-4 mr-2" /> Add Banner</Button>
+            </div>
+            {banners.length === 0 ? (
+              <p className="text-sm text-[#6B6B6B]">No banners</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {banners.map((banner) => (
+                  <div key={banner.id} className="relative bg-[#F8F9FA] rounded-xl overflow-hidden group">
+                    <div className="aspect-video bg-[#F5F5F0] flex items-center justify-center">
+                      {banner.image_url ? (
+                        <Image src={getImageUrl(banner.image_url)} alt="" fill className="object-cover" />
+                      ) : (
+                        <div className="text-center p-4">
+                          <p className="text-sm font-medium">{banner.title || 'Banner'}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <p className="text-sm font-medium truncate">{banner.title || 'Untitled'}</p>
+                      {banner.subtitle && <p className="text-xs text-[#6B6B6B] truncate">{banner.subtitle}</p>}
+                    </div>
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openBannerModal(banner)} className="p-1.5 bg-black/60 rounded-lg text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button onClick={() => setDeleteBannerTarget(banner)} className="p-1.5 bg-black/60 rounded-lg text-white"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'homepage' && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-1">
@@ -460,13 +579,50 @@ export default function AdminSettings() {
       </div>
 
       <Modal isOpen={slideModal} onClose={() => setSlideModal(false)} size="lg">
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           <h3 className="text-lg font-semibold text-[#1A1A1A]">{editingSlide ? 'Edit Slide' : 'Add Slide'}</h3>
-          <Input label="Heading" value={slideForm.heading} onChange={e => setSlideForm(prev => ({ ...prev, heading: e.target.value }))} />
-          <Input label="Subheading" value={slideForm.subheading} onChange={e => setSlideForm(prev => ({ ...prev, subheading: e.target.value }))} />
-          <Input label="CTA Text" value={slideForm.cta_text} onChange={e => setSlideForm(prev => ({ ...prev, cta_text: e.target.value }))} />
-          <Input label="CTA Link" value={slideForm.cta_link} onChange={e => setSlideForm(prev => ({ ...prev, cta_link: e.target.value }))} />
-          <Input label="Image URL" value={slideForm.image_url} onChange={e => setSlideForm(prev => ({ ...prev, image_url: e.target.value }))} />
+          <div>
+            <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Hero Image</label>
+            <div className="flex items-center gap-4">
+              <div className="w-24 h-16 rounded-xl bg-[#F5F5F0] overflow-hidden flex items-center justify-center shrink-0">
+                {slideForm.image_url ? (
+                  <Image src={getImageUrl(slideForm.image_url)} alt="" width={96} height={64} className="object-cover" />
+                ) : (
+                  <ImageIcon className="w-6 h-6 text-[#6B6B6B]" />
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input ref={slideImageInputRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadSlideImage(e.target.files[0]) }} />
+                <Button variant="outline" size="sm" onClick={() => slideImageInputRef.current?.click()} loading={uploadingSlideImage}>
+                  <Upload className="w-4 h-4 mr-2" /> Upload Image
+                </Button>
+                <Input label="Or image URL" value={slideForm.image_url} onChange={e => setSlideForm(prev => ({ ...prev, image_url: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Heading" value={slideForm.heading} onChange={e => setSlideForm(prev => ({ ...prev, heading: e.target.value }))} />
+            <Input label="Subheading" value={slideForm.subheading} onChange={e => setSlideForm(prev => ({ ...prev, subheading: e.target.value }))} />
+            <Input label="CTA Text" value={slideForm.cta_text} onChange={e => setSlideForm(prev => ({ ...prev, cta_text: e.target.value }))} />
+            <Input label="CTA Link" value={slideForm.cta_link} onChange={e => setSlideForm(prev => ({ ...prev, cta_link: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Animation Type</label>
+            <div className="flex gap-2">
+              {(['fade', 'slide', 'zoom'] as const).map(type => (
+                <button key={type} onClick={() => setSlideForm(prev => ({ ...prev, animation_type: type }))} className={cn('px-4 py-2 text-sm font-medium rounded-xl capitalize transition-all', slideForm.animation_type === type ? 'bg-[#2563EB] text-white' : 'bg-[#F5F5F0] text-[#6B6B6B] hover:bg-[#E5E5E5]')}>
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Text Color" type="color" value={slideForm.text_color} onChange={e => setSlideForm(prev => ({ ...prev, text_color: e.target.value }))} className="h-11 w-full p-1" />
+            <div>
+              <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Overlay Opacity: {slideForm.overlay_opacity}%</label>
+              <input type="range" min="0" max="100" value={slideForm.overlay_opacity} onChange={e => setSlideForm(prev => ({ ...prev, overlay_opacity: parseInt(e.target.value) }))} className="w-full" />
+            </div>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={slideForm.is_active} onChange={e => setSlideForm(prev => ({ ...prev, is_active: e.target.checked }))} className="rounded" /> Active
           </label>
@@ -484,6 +640,39 @@ export default function AdminSettings() {
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={() => setDeleteSlideTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={deleteSlide}>Delete</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={bannerModal} onClose={() => setBannerModal(false)} size="lg">
+        <div className="p-6 space-y-4">
+          <h3 className="text-lg font-semibold text-[#1A1A1A]">{editingBanner ? 'Edit Banner' : 'Add Banner'}</h3>
+          <Input label="Title" value={bannerForm.title} onChange={e => setBannerForm(prev => ({ ...prev, title: e.target.value }))} />
+          <Input label="Subtitle" value={bannerForm.subtitle} onChange={e => setBannerForm(prev => ({ ...prev, subtitle: e.target.value }))} />
+          <Input label="CTA Text" value={bannerForm.cta_text} onChange={e => setBannerForm(prev => ({ ...prev, cta_text: e.target.value }))} />
+          <Input label="CTA Link" value={bannerForm.cta_link} onChange={e => setBannerForm(prev => ({ ...prev, cta_link: e.target.value }))} />
+          <Input label="Image URL" value={bannerForm.image_url} onChange={e => setBannerForm(prev => ({ ...prev, image_url: e.target.value }))} />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Valid From" type="date" value={bannerForm.valid_from} onChange={e => setBannerForm(prev => ({ ...prev, valid_from: e.target.value }))} />
+            <Input label="Valid To" type="date" value={bannerForm.valid_to} onChange={e => setBannerForm(prev => ({ ...prev, valid_to: e.target.value }))} />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={bannerForm.is_active} onChange={e => setBannerForm(prev => ({ ...prev, is_active: e.target.checked }))} className="rounded" /> Active
+          </label>
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setBannerModal(false)}>Cancel</Button>
+            <Button onClick={saveBanner}>{editingBanner ? 'Update' : 'Create'}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!deleteBannerTarget} onClose={() => setDeleteBannerTarget(null)} size="sm">
+        <div className="p-6">
+          <h3 className="text-lg font-semibold text-[#1A1A1A] mb-2">Delete Banner</h3>
+          <p className="text-sm text-[#6B6B6B] mb-4">Are you sure?</p>
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setDeleteBannerTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={deleteBanner}>Delete</Button>
           </div>
         </div>
       </Modal>
